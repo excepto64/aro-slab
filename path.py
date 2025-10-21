@@ -15,6 +15,8 @@ import time
 from math import ceil
 from tools import getcubeplacement, setcubeplacement
 from setup_meshcat import updatevisuals
+from scipy.spatial.transform import Rotation as R
+from scipy.spatial.transform import Slerp
 
 
 discretisationsteps_newconf = 200 #To tweak later on
@@ -31,16 +33,18 @@ def computepath(qinit,qgoal,cubeplacementq0, cubeplacementqgoal, robot, cube, vi
 
 def displaypath(robot,path,dt,viz):
     for q0, q1 in zip(path[:-1],path[1:]):
-        displayedge(q0,q1, viz)
+        displayedge(q0,q1, viz, robot, cube)
 
-def displayedge(q0,q1, viz, vel=2.): #vel in sec.    
+def displayedge(q0,q1, viz, robot, cube, vel=2.): #vel in sec.    
     '''Display the path obtained by linear interpolation of q0 to q1 at constant velocity vel'''
-    dist = distance(q0,q1)
+    dist = distance(q0[0],q1[0])
     duration = dist / vel    
     nframes = ceil(48. * duration)
     f = 1./48.
     for i in range(nframes-1):
-        viz.display(lerp(q0,q1,float(i)/nframes))
+        setcubeplacement(robot, cube, se3_lerp(q0[1], q1[1], float(i)/nframes))
+        viz.display(lerp(q0[0],q1[0],float(i)/nframes))
+        updatevisuals(viz, robot, cube)
         time.sleep(f)
     viz.display(q1)
     time.sleep(f)
@@ -80,14 +84,48 @@ def NEAREST_VERTEX(G,q_rand):
                res = distance(q_rand, G[i][1])
      return ind
 
-def ADD_EDGE_AND_VERTEX(G,parent,q):
-    G += [(parent,q)]
+def ADD_EDGE_AND_VERTEX(G,parent,q,pos):
+    G += [(parent,q,pos)]
 
 def lerp(q0,q1,t):    
     """Linear interpolation"""
     return q0 * (1 - t) + q1 * t
 
-def NEW_CONF(q_near,q_rand,discretisationsteps, delta_q = None):
+def se3_lerp(M1, M2, t):
+    """
+    Geodesic interpolation using Pinocchio's exp/log maps.
+    """
+    # Compute relative transformation
+    M_rel = M1.inverse() * M2
+    
+    # Get the tangent vector (twist)
+    nu = pin.log(M_rel)  # Returns Motion (6D twist)
+    
+    # Scale by interpolation parameter
+    nu_interp = t * nu
+    
+    # Exponentiate back to SE3
+    M_interp_rel = pin.exp(nu_interp)
+    
+    # Apply to initial pose
+    return M1 * M_interp_rel
+
+def NEW_CONF(pos_near,pos_rand,discretisationsteps, robot, cube, delta_q = None):
+    '''Return the closest configuration q_new such that the path q_near => q_new is the longest
+    along the linear interpolation (q_near,q_rand) that is collision free and of length <  delta_q'''
+    dist = distance(pos_rand.translation, pos_near.translation)
+    pos_end = pos_rand.copy()
+    if delta_q is not None and dist > delta_q:
+        pos_end = se3_lerp(pos_near, pos_rand, delta_q/dist)
+    dt = 1 / discretisationsteps
+    for i in range(discretisationsteps):
+        pos_new = se3_lerp(pos_near, pos_end, dt*i)
+        q_new, _ = computeqgrasppose(robot, robot.q0, cube, pos_new)
+        if coll(q_new):
+            return se3_lerp(pos_near, pos_end, dt*(i-1))
+    return pos_end
+
+def NEW_CONF_q(q_near,q_rand,discretisationsteps, delta_q = None):
     '''Return the closest configuration q_new such that the path q_near => q_new is the longest
     along the linear interpolation (q_near,q_rand) that is collision free and of length <  delta_q'''
     dist = distance(q_rand, q_near)
@@ -102,21 +140,22 @@ def NEW_CONF(q_near,q_rand,discretisationsteps, delta_q = None):
     return q_end
 
 def VALID_EDGE(q_new,q_goal,discretisationsteps):
-    return norm(q_goal - NEW_CONF(q_new, q_goal,discretisationsteps)) < 1e-3
+    return norm(q_goal - NEW_CONF_q(q_new, q_goal,discretisationsteps)) < 1e-3
 
 def rrt(q_init, q_goal, k, delta_q, robot, cube, cubeplacementq0, cubeplacementqgoal, viz):
-    G = [(None,q_init)]
+    G = [(None,q_init,cubeplacementq0)]
     for _ in range(k):
-        q_rand, pos = sample_config(robot, cube, cubeplacementq0, cubeplacementqgoal, viz)
+        q_rand, pos_rand = sample_config(robot, cube, cubeplacementq0, cubeplacementqgoal, viz)
         #print("Random: ", q_rand)   
         q_near_index = NEAREST_VERTEX(G,q_rand)
-        q_near = G[q_near_index][1]        
-        q_new = NEW_CONF(q_near,q_rand,discretisationsteps_newconf, delta_q = None)    
-        ADD_EDGE_AND_VERTEX(G,q_near_index,q_new)
+        pos_near = G[q_near_index][2]        
+        pos_new = NEW_CONF(pos_near,pos_rand,discretisationsteps_newconf, robot, cube, delta_q = None)    
+        q_new, _ = computeqgrasppose(robot, robot.q0, cube, pos_new)
+        ADD_EDGE_AND_VERTEX(G,q_near_index,q_new, pos_new)
         #print("Added edge: ", q_near, q_new)
         if VALID_EDGE(q_new,q_goal,discretisationsteps_validedge):
             print ("Path found!")
-            ADD_EDGE_AND_VERTEX(G,len(G)-1,q_goal)
+            ADD_EDGE_AND_VERTEX(G,len(G)-1,q_goal, cubeplacementqgoal)
             return G, True
         if _ % 100 == 0:
             print("RRT round ", _)
@@ -127,9 +166,9 @@ def getpath(G):
     path = []
     node = G[-1]
     while node[0] is not None:
-        path = [node[1]] + path
+        path = [node[1:3]] + path
         node = G[node[0]]
-    path = [G[0][1]] + path
+    path = [G[0][1:3]] + path
     return path
 
 if __name__ == "__main__":
@@ -139,7 +178,7 @@ if __name__ == "__main__":
     
     robot, cube, viz = setupwithmeshcat()
     
-    
+    print(CUBE_PLACEMENT.__class__)
     q = robot.q0.copy()
     updatevisuals(viz, robot, cube, q)
     q0,successinit = computeqgrasppose(robot, q, cube, CUBE_PLACEMENT, viz)
@@ -154,6 +193,6 @@ if __name__ == "__main__":
     
     path = computepath(q0,qe,CUBE_PLACEMENT, CUBE_PLACEMENT_TARGET, robot, cube, viz)
     
-    displaypath(robot,path,dt=0.5,viz=viz) #you ll probably want to lower dt
+    displaypath(robot,path,cube,dt=0.5, viz=viz) #you ll probably want to lower dt
     time.sleep(2)
-    displaypath(robot,path,dt=0.5,viz=viz) #you ll probably want to lower dt
+    displaypath(robot,path,cube,dt=0.5, viz=viz) #you ll probably want to lower dt
