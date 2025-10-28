@@ -51,6 +51,3 @@ if __name__ == "__main__":
     
     qe,successend = computeqgrasppose(robot, q, cube, CUBE_PLACEMENT_TARGET,  viz)
     updatevisuals(viz, robot, cube, q0)
-    
-    
-    

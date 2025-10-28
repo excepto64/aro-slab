@@ -276,4 +276,3 @@ if __name__ == "__main__":
     path, path_length = computepath(robot, cube, viz, q0, qe, CUBE_PLACEMENT, CUBE_PLACEMENT_TARGET)
     
     displaypath(robot,cube,path,dt=0.005,viz=viz) #you ll probably want to lower dt
-    
