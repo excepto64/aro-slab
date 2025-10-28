@@ -8,129 +8,255 @@ Created on Thu Sep 21 11:44:32 2023
 
 import pinocchio as pin
 import numpy as np
-from numpy.linalg import pinv, norm
+from scipy.spatial import cKDTree
+from numpy.linalg import pinv
+from tools import setupwithmeshcat, collision, jointlimitsviolated, setcubeplacement, getcubeplacement
 
+from inverse_geometry import computeqgrasppose
 from config import LEFT_HAND, RIGHT_HAND
 import time
-from math import ceil
-from tools import getcubeplacement, setcubeplacement
+from pinocchio.utils import rotate
 from setup_meshcat import updatevisuals
-
-
-discretisationsteps_newconf = 200 #To tweak later on
-discretisationsteps_validedge = 200 #To tweak later on
 
 #returns a collision free path from qinit to qgoal under grasping constraints
 #the path is expressed as a list of configurations
-def computepath(qinit,qgoal,cubeplacementq0, cubeplacementqgoal, robot, cube, viz):
-    k = 1000
-    delta_q = 1. #To tweak later on
-    G, success = rrt(qinit, qgoal, k, delta_q, robot, cube, cubeplacementq0, cubeplacementqgoal, viz)
-    return getpath(G)
+def computepath(robot, cube, viz, qinit, qgoal, cubeplacementq0, cubeplacementqgoal):
+    
+    numberOfSamples4Search = 1000
+    deltaq = 3
+    interpolation_steps = 200
+    
+    # Should RRT pass robot q 
+    G, pathFound = RRT(robot, cube, viz, qinit, qgoal, cubeplacementq0, cubeplacementqgoal, numberOfSamples4Search, deltaq)
+    
+    if pathFound:
+        print("Path found with", len(G), "nodes")
+        return getPathFromGraph(G, robot, cube, viz, interpolation_steps), len(G)
+    else: 
+        print("No path found")
+        return []
+    
 
+    
+def RRT(robot, cube, viz, qinit, qgoal, cubeq0, cubeqgoal, k, deltaq):
+    G = [(None, qinit, cubeq0, cubeq0.translation, cubeq0.rotation)]
+    
+    steps4NewConf = 200 #To tweak later on
+    steps4ValidEdge = 200 #To tweak later on
+    delta_q = None
+    
+    print("Computing path...")
 
-def displaypath(robot,path,dt,viz):
-    for q0, q1 in zip(path[:-1],path[1:]):
-        displayedge(q0,q1, viz)
-
-def displayedge(q0,q1, viz, vel=2.): #vel in sec.    
-    '''Display the path obtained by linear interpolation of q0 to q1 at constant velocity vel'''
-    dist = distance(q0,q1)
-    duration = dist / vel    
-    nframes = ceil(48. * duration)
-    f = 1./48.
-    for i in range(nframes-1):
-        viz.display(lerp(q0,q1,float(i)/nframes))
-        time.sleep(f)
-    viz.display(q1)
-    time.sleep(f)
-
-def sample_config(robot, cube, cube_start, cube_target, viz):
-    # Sample configurations until a successful one is found
-    dist = norm(cube_target.translation - cube_start.translation)
-    upper = np.maximum(cube_start.translation, cube_target.translation) + 0.5*dist
-    lower = np.minimum(cube_start.translation, cube_target.translation) - 0.5*dist
-    success = False
-    while not success:
-        rand = np.random.random(3)
-        cube_pos = np.array([0.0,0.0,0.0,0.0,0.0,0.0,1.0])
-        cube_pos[0:3] += (upper - lower) * rand + lower
-        pos = pin.XYZQUATToSE3(cube_pos)
-        setcubeplacement(robot, cube, pos)
-        q, success = computeqgrasppose(robot, robot.q0, cube, pos, viz)
-
-    return q, pos
-
-def coll(q):
-     '''Return true if q in collision, false otherwise.'''
-     pin.updateGeometryPlacements(robot.model,robot.data,robot.collision_model,robot.collision_data,q)
-     return pin.computeCollisions(robot.collision_model,robot.collision_data,False)
-
-def distance(q1,q2):    
-     '''Return the euclidian distance between two configurations'''
-     return norm(q2 - q1)
+    for i in range(k):
         
-def NEAREST_VERTEX(G,q_rand):
-     '''returns the index of the Node of G with the configuration closest to q_rand  '''
-     res = np.inf
-     ind = -1
-     for i in range(len(G)):
-          if distance(q_rand, G[i][1]) < res:
-               ind = i
-               res = distance(q_rand, G[i][1])
-     return ind
-
-def ADD_EDGE_AND_VERTEX(G,parent,q):
-    G += [(parent,q)]
-
-def lerp(q0,q1,t):    
-    """Linear interpolation"""
-    return q0 * (1 - t) + q1 * t
-
-def NEW_CONF(q_near,q_rand,discretisationsteps, delta_q = None):
-    '''Return the closest configuration q_new such that the path q_near => q_new is the longest
-    along the linear interpolation (q_near,q_rand) that is collision free and of length <  delta_q'''
-    dist = distance(q_rand, q_near)
-    q_end = q_rand.copy()
-    if delta_q is not None and dist > delta_q:
-        q_end = lerp(q_near, q_rand, delta_q/dist)
-    dt = 1 / discretisationsteps
-    for i in range(discretisationsteps):
-        q_new = lerp(q_near, q_end, dt*i)
-        if coll(q_new):
-            return lerp(q_near, q_end, dt*(i-1))
-    return q_end
-
-def VALID_EDGE(q_new,q_goal,discretisationsteps):
-    return norm(q_goal - NEW_CONF(q_new, q_goal,discretisationsteps)) < 1e-3
-
-def rrt(q_init, q_goal, k, delta_q, robot, cube, cubeplacementq0, cubeplacementqgoal, viz):
-    G = [(None,q_init)]
-    for _ in range(k):
-        q_rand, pos = sample_config(robot, cube, cubeplacementq0, cubeplacementqgoal, viz)
-        #print("Random: ", q_rand)   
-        q_near_index = NEAREST_VERTEX(G,q_rand)
-        q_near = G[q_near_index][1]        
-        q_new = NEW_CONF(q_near,q_rand,discretisationsteps_newconf, delta_q = None)    
-        ADD_EDGE_AND_VERTEX(G,q_near_index,q_new)
-        #print("Added edge: ", q_near, q_new)
-        if VALID_EDGE(q_new,q_goal,discretisationsteps_validedge):
-            print ("Path found!")
-            ADD_EDGE_AND_VERTEX(G,len(G)-1,q_goal)
+        qrand, cuberand = randomSampleRobotConfig(robot, cube, viz, cubeq0, cubeqgoal, G)
+        qnear_index = getNearestVertex(G, qrand)
+        cubenear = G[qnear_index][2]      
+        qnew, cubenew = newConfigNearObstacle(robot, qrand, cubenear, cuberand, steps4NewConf, delta_q, cube, viz)    
+        addValidEdgeAndVertex(G, qnear_index, qnew, cubenew)
+        
+        if validEdgeSE3(robot, qnew, cube, viz, cubenew, cubeqgoal, steps4ValidEdge):
+            addValidEdgeAndVertex(G,len(G)-1,qgoal, cubeqgoal)
             return G, True
-        if _ % 100 == 0:
-            print("RRT round ", _)
-    print("path not found")
+        
+#         if i%10==0:
+#             print("|", end="")
+#         else:
+#             print("-", end="")
+#         if i%100==0 and i!=0:
+#             print("\n|", end="")
+            
     return G, False
+    
 
-def getpath(G):
+    
+def randomSampleRobotConfig(robot, cube, viz, cubeq0, cubeqgoal, G):
+    
+    q0 = cubeq0.translation
+    qgoal = cubeqgoal.translation
+    cubeq0rot = pin.Quaternion(cubeq0.rotation)
+    cubeqgoalrot = pin.Quaternion(cubeqgoal.rotation)
+    validConfig = False
+    q = robot.q0.copy()
+    
+    # Get sample space 
+    centrepoint = np.array(0.5 * (q0 + qgoal))
+    radius = (np.linalg.norm(q0 - centrepoint)) 
+    
+    while not validConfig:
+        # Random rotational sample between q0 and q1 rotation
+        t = np.random.rand()
+        randomRotation = pin.Quaternion.slerp(cubeq0rot, t, cubeqgoalrot)
+        
+        # Random sample in 3D space
+        randomSample = centrepoint+(np.random.rand(3)*2-1) * radius
+        
+        RANDOM_CUBE_PLACEMENT = pin.SE3(randomRotation, randomSample)
+  
+        if not duplicateCube(G, RANDOM_CUBE_PLACEMENT):
+            config, validConfig = computeqgrasppose(robot, q, cube, RANDOM_CUBE_PLACEMENT, viz)
+                  
+    return config, RANDOM_CUBE_PLACEMENT
+
+
+def duplicateCube(G, cubeQ, tol=1e-2):
+    cubeTrans = cubeQ.translation
+    cubeRot = cubeQ.rotation
+    for (_, _, _, trans, rot) in G:
+        euclid_dist = distance(trans, cubeTrans)
+        rotation_dist = distance(rot, cubeRot)
+        if euclid_dist < tol and rotation_dist < tol:
+            return True
+    return False
+
+
+
+def addValidEdgeAndVertex(G, parent, q, cube):
+    G += [(parent, q, cube, cube.translation, cube.rotation)]
+
+
+def getNearestVertex(G, qrand):
+    min_dist = np.inf
+    idx=-1
+    for (i, node) in enumerate(G):
+        dist = distance(node[1] ,qrand)
+        if dist < min_dist:
+            min_dist = dist
+            idx = i
+    return idx
+
+
+def newConfigNearObstacle(robot, q, cubenear, cuberand, steps4NewConf, delta_q, cube, viz):
+    dist = distanceSE3(cubenear, cuberand)
+    qprevious, _ = computeqgrasppose(robot, q, cube, cubenear, viz)
+    cubeprevious = cubenear
+    
+    if delta_q is not None and dist > delta_q:
+        cubeprevious = interpolationSE3(cubenear, cuberand, delta_q/dist)
+        qprevious, validConfig = computeqgrasppose(robot, q, cube, cubeend, viz)
+        
+    conf_path, cube_path = interPath(robot, q, cube, viz, cubenear, cuberand, steps4NewConf)
+    
+    if len(conf_path) != 0 and len(cube_path) != 0: 
+        return conf_path[-1], cube_path[-1]
+    else:
+        return qprevious, cubeprevious
+    
+    
+def interpolationSE3(q0, q1, t):
+    p0 = q0.translation
+    p1 = q1.translation
+    p = p0 * (1 - t) + p1 * t
+    
+    q0rot = pin.Quaternion(q0.rotation)
+    q1rot = pin.Quaternion(q1.rotation)
+    
+    qrot = pin.Quaternion.slerp(q0rot, t, q1rot)
+    qrot.normalize()
+    return pin.SE3(qrot, p)
+
+
+def interPath(robot, q_start, cube, viz, q0, q1, steps):
+    inter_path_configs = []
+    inter_path_cubes = []
+    q_current = q_start.copy()
+
+    for step in range(steps):
+        cubeq = interpolationSE3(q0, q1, step / steps)
+        q_next, validConfig = computeqgrasppose(robot, q_current, cube, cubeq, viz)
+
+        if not validConfig:
+            break  
+        inter_path_configs.append(q_next)
+        inter_path_cubes.append(cubeq)
+        q_current = q_next 
+
+    return inter_path_configs, inter_path_cubes
+    
+
+def validEdgeSE3(robot, q, cube, viz, cubeq0, cubeqgoal, steps):
+    for step in range(steps):
+        cubeq = interpolationSE3(cubeq0, cubeqgoal, step/steps)
+        q, validConfig = computeqgrasppose(robot, q, cube, cubeq, viz)
+        if not validConfig:
+            return False
+    return True
+
+
+def getPathFromGraph(G, robot, cube, viz, steps):
     path = []
+    config_path = []
+    cube_path = []
     node = G[-1]
+    
     while node[0] is not None:
-        path = [node[1]] + path
+        config_path = [node[1]] + config_path
+        cube_path = [node[2]] + cube_path
         node = G[node[0]]
-    path = [G[0][1]] + path
+        
+    config_path = [node[1]] + config_path
+    cube_path = [node[2]] + cube_path
+        
+    for _ in range(len(G)/3):
+        config_path, cube_path = shortcut(config_path, cube_path, robot, node[1], cube, viz, steps)
+        
+    for i in range(len(config_path) - 1):
+        path += [config_path[i]]
+        configs, _ = interPath(robot, node[1], cube, viz, cube_path[i], cube_path[i+1], steps)
+
+        path += configs
+        
+        
+    path = path + [config_path[-1]]
     return path
+
+
+# Shortcut with cubes? 
+def shortcut(path, cube_path, robot, q, cube, viz, steps):
+    for i, cubeq in enumerate(cube_path):
+        for j in reversed(range(i+1,len(cube_path))):
+            cubeq2 = cube_path[j]
+            if validEdgeSE3(robot, q, cube, viz, cubeq, cubeq2, steps):
+                path = path[:i+1]+ path[j:]
+                cube_path = cube_path[:i+1]+ cube_path[j:]
+                return path, cube_path
+    return path, cube_path
+
+
+def distance(q1, q2):
+    distance = np.linalg.norm(q2-q1)
+    return distance
+
+
+def distanceSE3(q1, q2):
+    distance = pin.log(q1.inverse()*q2).vector
+    return distance
+
+
+def displaypath(robot,cube,path,dt,viz):
+    q_new = path[-1].copy()
+    data = robot.data.copy()  # Fresh data instance
+    pin.forwardKinematics(robot.model, data, q_new)
+    pin.updateFramePlacements(robot.model, data)  # Important!
+    frameL = robot.model.getFrameId(LEFT_HAND)
+    effL = data.oMf[frameL] 
+    cube_pos = getcubeplacement(cube)
+    eMc = effL.inverse() * cube_pos
+
+    for q in path:
+        viz.display(q)
+        setcubeplacement(robot, cube, getcube(robot, q, eMc))
+        time.sleep(dt)
+        
+        
+def getcube(robot, q, eMc):
+    data = robot.data.copy()  # Fresh data instance
+    pin.forwardKinematics(robot.model, data, q)
+    pin.updateFramePlacements(robot.model, data)  # Important!
+    frameL = robot.model.getFrameId(LEFT_HAND)
+    effL = data.oMf[frameL] 
+    return effL * eMc
+
 
 if __name__ == "__main__":
     from tools import setupwithmeshcat
@@ -141,19 +267,13 @@ if __name__ == "__main__":
     
     
     q = robot.q0.copy()
-    updatevisuals(viz, robot, cube, q)
     q0,successinit = computeqgrasppose(robot, q, cube, CUBE_PLACEMENT, viz)
-    updatevisuals(viz, robot, cube, q0)
-    time.sleep(0.5)
     qe,successend = computeqgrasppose(robot, q, cube, CUBE_PLACEMENT_TARGET,  viz)
-    updatevisuals(viz, robot, cube, qe)
-    time.sleep(0.5)
-
+    
     if not(successinit and successend):
         print ("error: invalid initial or end configuration")
     
-    path = computepath(q0,qe,CUBE_PLACEMENT, CUBE_PLACEMENT_TARGET, robot, cube, viz)
+    path = computepath(q0,qe,CUBE_PLACEMENT, CUBE_PLACEMENT_TARGET)
     
-    displaypath(robot,path,dt=0.5,viz=viz) #you ll probably want to lower dt
-    time.sleep(2)
-    displaypath(robot,path,dt=0.5,viz=viz) #you ll probably want to lower dt
+    displaypath(robot,cube,path,dt=0.5,viz=viz) #you ll probably want to lower dt
+    

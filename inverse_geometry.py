@@ -9,7 +9,7 @@ Created on Wed Sep  6 15:32:51 2023
 import pinocchio as pin 
 import numpy as np
 from numpy.linalg import pinv,inv,norm,svd,eig
-from tools import collision, getcubeplacement, setcubeplacement, projecttojointlimits
+from tools import collision, getcubeplacement, setcubeplacement, projecttojointlimits, jointlimitsviolated
 from config import LEFT_HOOK, RIGHT_HOOK, LEFT_HAND, RIGHT_HAND, EPSILON
 from config import CUBE_PLACEMENT, CUBE_PLACEMENT_TARGET
 import time
@@ -22,10 +22,10 @@ def cost(q, robot, targetL, targetR):
     pin.forwardKinematics(robot.model, data, q)
     pin.updateFramePlacements(robot.model, data)  # Important!
     frameL = robot.model.getFrameId(LEFT_HAND)
-    effL = data.oMf[frameL]
-    errL = norm(pin.log(effL.inverse() * targetL).vector)**2
     frameR = robot.model.getFrameId(RIGHT_HAND)
+    effL = data.oMf[frameL]
     effR = data.oMf[frameR] 
+    errL = norm(pin.log(effL.inverse() * targetL).vector)**2
     errR = norm(pin.log(effR.inverse() * targetR).vector)**2
     return errR + errL
 
@@ -35,8 +35,7 @@ def computeqgrasppose(robot, qcurrent, cube, cubetarget, viz=None):
     targetL = getcubeplacement(cube, LEFT_HOOK) #placement of the left hand hook
     targetR = getcubeplacement(cube, RIGHT_HOOK) #placement of the right hand hook
     q, _, _, _, _, _, warn = fmin_bfgs(cost, qcurrent, args=(robot, targetL, targetR), full_output=True, disp=False)
-    coll = collision(robot, q)
-    success = warn == 0 and not coll
+    success = warn == 0 and not collision(robot, q) and not jointlimitsviolated(robot, q)
     return q, success
             
 if __name__ == "__main__":
@@ -49,6 +48,7 @@ if __name__ == "__main__":
     
     q0,successinit = computeqgrasppose(robot, q, cube, CUBE_PLACEMENT, viz)
     updatevisuals(viz, robot, cube, q0)
+    
     qe,successend = computeqgrasppose(robot, q, cube, CUBE_PLACEMENT_TARGET,  viz)
     updatevisuals(viz, robot, cube, q0)
     
