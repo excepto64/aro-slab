@@ -133,7 +133,7 @@ def newConfigNearObstacle(robot, q, cubenear, cuberand, steps4NewConf, delta_q, 
     
     if delta_q is not None and dist > delta_q:
         cubeprevious = interpolationSE3(cubenear, cuberand, delta_q/dist)
-        qprevious, validConfig = computeqgrasppose(robot, q, cube, cubeend, viz)
+        qprevious, validConfig = computeqgrasppose(robot, q, cube, cubeprevious, viz)
         
     conf_path, cube_path = interPath(robot, q, cube, viz, cubenear, cuberand, steps4NewConf)
     
@@ -197,7 +197,7 @@ def getPathFromGraph(G, robot, cube, viz, steps):
     config_path = [node[1]] + config_path
     cube_path = [node[2]] + cube_path
         
-    for _ in range(len(G)/3):
+    for _ in range(int(len(G)/2)):
         config_path, cube_path = shortcut(config_path, cube_path, robot, node[1], cube, viz, steps)
         
     for i in range(len(config_path) - 1):
@@ -273,7 +273,7 @@ if __name__ == "__main__":
     if not(successinit and successend):
         print ("error: invalid initial or end configuration")
     
-    path = computepath(q0,qe,CUBE_PLACEMENT, CUBE_PLACEMENT_TARGET)
+    path, path_length = computepath(robot, cube, viz, q0, qe, CUBE_PLACEMENT, CUBE_PLACEMENT_TARGET)
     
-    displaypath(robot,cube,path,dt=0.5,viz=viz) #you ll probably want to lower dt
+    displaypath(robot,cube,path,dt=0.005,viz=viz) #you ll probably want to lower dt
     
