@@ -8,15 +8,10 @@ Created on Thu Sep 21 11:44:32 2023
 
 import pinocchio as pin
 import numpy as np
-from scipy.spatial import cKDTree
-from numpy.linalg import pinv
-from tools import setupwithmeshcat, collision, jointlimitsviolated, setcubeplacement, getcubeplacement
-
+from tools import setupwithmeshcat, setcubeplacement, getcubeplacement
 from inverse_geometry import computeqgrasppose
-from config import LEFT_HAND, RIGHT_HAND
+from config import LEFT_HAND
 import time
-from pinocchio.utils import rotate
-from setup_meshcat import updatevisuals
 
 #returns a collision free path from qinit to qgoal under grasping constraints
 #the path is expressed as a list of configurations
@@ -31,7 +26,7 @@ def computepath(robot, cube, viz, qinit, qgoal, cubeplacementq0, cubeplacementqg
     
     if pathFound:
         print("Path found with", len(G), "nodes")
-        return getPathFromGraph(G, robot, cube, viz, interpolation_steps), len(G)
+        return getPathFromGraph(G, robot, cube, viz, interpolation_steps)
     else: 
         print("No path found")
         return []
@@ -273,7 +268,6 @@ if __name__ == "__main__":
     if not(successinit and successend):
         print ("error: invalid initial or end configuration")
     
-    path, path_length = computepath(robot, cube, viz, q0, qe, CUBE_PLACEMENT, CUBE_PLACEMENT_TARGET)
+    path = computepath(robot, cube, viz, q0, qe, CUBE_PLACEMENT, CUBE_PLACEMENT_TARGET)
     
     displaypath(robot,cube,path,dt=0.005,viz=viz) #you ll probably want to lower dt
-    
