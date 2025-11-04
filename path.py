@@ -15,7 +15,7 @@ import time
 
 #returns a collision free path from qinit to qgoal under grasping constraints
 #the path is expressed as a list of configurations
-def computepath(robot, cube, qinit, qgoal, cubeplacementq0, cubeplacementqgoal):
+def computepath(robot, cube, viz, qinit, qgoal, cubeplacementq0, cubeplacementqgoal):
     
     numberOfSamples4Search = 1000
     deltaq = 3
@@ -33,7 +33,7 @@ def computepath(robot, cube, qinit, qgoal, cubeplacementq0, cubeplacementqgoal):
     
 
     
-def RRT(robot, cube, qinit, qgoal, cubeq0, cubeqgoal, k, deltaq):
+def RRT(robot, cube, viz, qinit, qgoal, cubeq0, cubeqgoal, k, deltaq):
     G = [(None, qinit, cubeq0, cubeq0.translation, cubeq0.rotation)]
     
     steps4NewConf = 200 #To tweak later on
@@ -58,7 +58,7 @@ def RRT(robot, cube, qinit, qgoal, cubeq0, cubeqgoal, k, deltaq):
     
 
     
-def randomSampleRobotConfig(robot, cube, cubeq0, cubeqgoal, G):
+def randomSampleRobotConfig(robot, cube, viz, cubeq0, cubeqgoal, G):
     
     q0 = cubeq0.translation
     qgoal = cubeqgoal.translation
@@ -88,6 +88,10 @@ def randomSampleRobotConfig(robot, cube, cubeq0, cubeqgoal, G):
 
 
 def duplicateCube(G, cubeQ, tol=1e-2):
+    """
+    Check is sampled cube is not too close to any cube sampled in the
+    configuration.
+    """
     cubeTrans = cubeQ.translation
     cubeRot = cubeQ.rotation
     for (_, _, _, trans, rot) in G:
@@ -100,10 +104,16 @@ def duplicateCube(G, cubeQ, tol=1e-2):
 
 
 def addValidEdgeAndVertex(G, parent, q, cube):
+    """
+    Add vertex and edge to graph. 
+    """
     G += [(parent, q, cube, cube.translation, cube.rotation)]
 
 
 def getNearestVertex(G, qrand):
+    """
+    Get the id of the nearest node to qrand in the graph.
+    """
     min_dist = np.inf
     idx=-1
     for (i, node) in enumerate(G):
@@ -114,7 +124,7 @@ def getNearestVertex(G, qrand):
     return idx
 
 
-def newConfigNearObstacle(robot, q, cubenear, cuberand, steps4NewConf, delta_q, cube):
+def newConfigNearObstacle(robot, q, cubenear, cuberand, steps4NewConf, delta_q, cube, viz):
     dist = distanceSE3(cubenear, cuberand)
     qprevious, _ = computeqgrasppose(robot, q, cube, cubenear)
     cubeprevious = cubenear
@@ -134,6 +144,9 @@ def newConfigNearObstacle(robot, q, cubenear, cuberand, steps4NewConf, delta_q, 
     
     
 def interpolationSE3(q0, q1, t):
+    """
+    Interpolate between two SE3 locations.
+    """
     p0 = q0.translation
     p1 = q1.translation
     p = p0 * (1 - t) + p1 * t
@@ -146,7 +159,7 @@ def interpolationSE3(q0, q1, t):
     return pin.SE3(qrot, p)
 
 
-def interPath(robot, q_start, cube, q0, q1, steps):
+def interPath(robot, q_start, cube, viz, q0, q1, steps):
     inter_path_configs = []
     inter_path_cubes = []
     q_current = q_start.copy()
@@ -164,7 +177,7 @@ def interPath(robot, q_start, cube, q0, q1, steps):
     return inter_path_configs, inter_path_cubes
     
 
-def validEdgeSE3(robot, q, cube, cubeq0, cubeqgoal, steps):
+def validEdgeSE3(robot, q, cube, viz, cubeq0, cubeqgoal, steps):
     for step in range(steps):
         cubeq = interpolationSE3(cubeq0, cubeqgoal, step/steps)
         q, validConfig = computeqgrasppose(robot, q, cube, cubeq)
@@ -173,12 +186,12 @@ def validEdgeSE3(robot, q, cube, cubeq0, cubeqgoal, steps):
     return True
 
 
-def getPathFromGraph(G, robot, cube, steps):
+def getPathFromGraph(G, robot, cube, viz, steps):
     path = []
     config_path = []
     cube_path = []
     node = G[-1]
-    
+    # Backwards traverse the graph to get to the origin.
     while node[0] is not None:
         config_path = [node[1]] + config_path
         cube_path = [node[2]] + cube_path
@@ -187,6 +200,7 @@ def getPathFromGraph(G, robot, cube, steps):
     config_path = [node[1]] + config_path
     cube_path = [node[2]] + cube_path
         
+    # Finds shortcuts that cut the length of the path
     for _ in range(int(len(G)/2)):
         config_path, cube_path = shortcut(config_path, cube_path, robot, node[1], cube, steps)
         
@@ -202,7 +216,7 @@ def getPathFromGraph(G, robot, cube, steps):
 
 
 # Shortcut with cubes? 
-def shortcut(path, cube_path, robot, q, cube, steps):
+def shortcut(path, cube_path, robot, q, cube, viz, steps):
     for i, cubeq in enumerate(cube_path):
         for j in reversed(range(i+1,len(cube_path))):
             cubeq2 = cube_path[j]
