@@ -232,9 +232,12 @@ def getPathFromGraph(G, robot, cube, viz, steps):
     cube_path = [node[2]] + cube_path
         
     # Finds shortcuts that cut the length of the path
-    for _ in range(int(len(G)/2)):
-        config_path, cube_path = shortcut(config_path, cube_path, robot, node[1], cube, viz, steps)
-        
+    print(f"Finding shortcut... (original length: {len(cube_path)})")
+    shortcut_found = True
+    while shortcut_found:
+        config_path, cube_path, shortcut_found = shortcut(config_path, cube_path, robot, node[1], cube, viz, steps)
+    print(f"Shortcut found with {len(config_path)} nodes. Starting interpolation.")
+
     for i in range(len(config_path) - 1):
         path += [config_path[i]]
         configs, _ = interPath(robot, node[1], cube, viz, cube_path[i], cube_path[i+1], steps)
@@ -254,13 +257,13 @@ def shortcut(path, cube_path, robot, q, cube, viz, steps):
     Only takes the first found shortcut.
     """
     for i, cubeq in enumerate(cube_path):
-        for j in reversed(range(i+1,len(cube_path))):
+        for j in reversed(range(i+2,len(cube_path))):
             cubeq2 = cube_path[j]
             if validEdgeSE3(robot, q, cube, viz, cubeq, cubeq2, steps):
                 path = path[:i+1]+ path[j:]
                 cube_path = cube_path[:i+1]+ cube_path[j:]
-                return path, cube_path
-    return path, cube_path
+                return path, cube_path, True
+    return path, cube_path, False
 
 
 def distance(q1, q2):
@@ -308,7 +311,7 @@ if __name__ == "__main__":
     
     q = robot.q0.copy()
     q0,successinit = computeqgrasppose(robot, q, cube, CUBE_PLACEMENT, viz)
-    qe,successend = computeqgrasppose(robot, q, cube, CUBE_PLACEMENT_TARGET,  viz)
+    qe,successend = computeqgrasppose(robot, q, cube, CUBE_PLACEMENT_TARGET, viz)
     
     if not(successinit and successend):
         print ("error: invalid initial or end configuration")
