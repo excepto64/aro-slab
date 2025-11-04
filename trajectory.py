@@ -8,25 +8,30 @@ import time
 
 
 
-def getTrajectory(robot, cube, path, P, I, D):
+def getTrajectory(robot, cube, path, max_time, P, I, D):
     print("Getting Trajectory")
     t_start = 0
-    t_end = 1
+    t_end = max_time
 
-    # len(path) - 1 to make len(path) and len(time_steps) the same length
-    dt = t_end/(len(path)-1)
+    # len(path) - 2 to make len(path) 1 longer than len(time_steps) 
+    dt = t_end/(len(path)-2)
     time_steps = np.arange(t_start, t_end + dt, dt)
 
+    print(len(path))
+    print(len(time_steps))
 
-    trajectories = [np.zeros(len(path[0]))]
+    trajectories = np.empty([len(time_steps), 2, len(path[0])])
+
+    print(trajectories.shape)
 
 
     for i in range(len(time_steps)-1):
-        # print("At time step" , i, "of", len(time_steps))
+        print("At time step" , i, "of", len(time_steps))
         q_current = path[i]
         q_current_goal = path[i+1]
 
-        trajectories += [q_current_goal - q_current]
+        trajectories[i][0] = q_current
+        trajectories[i][1] = q_current_goal - q_current
 
         # trajectories += [stepThroughPath(robot, cube, q_current, q_current_goal, P, I, D)]
 
@@ -100,10 +105,10 @@ if __name__ == "__main__":
     trajs, time_steps = getTrajectory(robot, cube, path, P, I, D)
     print("trajectory array length:", len(trajs))
     
+    print(len(path))
+    print(len(time_steps))
+    print(len(trajs))
 
-    print(time_steps[0:5])
-    print(np.arange(len(time_steps))*DT)
-
-    print(trajs[1])
-    print(path[0])
-    print(path[0]==path[1])
+    # print(trajs[1])
+    # print(path[0])
+    # print(path[0]==path[1])

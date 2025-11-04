@@ -7,22 +7,41 @@ Created on Wed Sep  6 15:32:51 2023
 """
 
 import numpy as np
+import pinocchio as pin
 
 from bezier import Bezier
     
 # in my solution these gains were good enough for all joints but you might want to tune this.
-Kp = 300.               # proportional gain (P of PD)
+Kp = 100.               # proportional gain (P of PD)
 Kv = 2 * np.sqrt(Kp)   # derivative gain (D of PD)
 
 def controllaw(sim, robot, trajs, tcurrent, cube):
     q, vq = sim.getpybulletstate()
     
-    # From trajs get torques
-    current_traj = trajs[tcurrent / DT]
-    print("current traj", current_traj)
+    t_idx = (int) (tcurrent / dt)
 
-    torques = [0.0 for _ in sim.bulletCtrlJointsInPinOrder]
-    sim.step(torques)
+    q_desired = trajs[t_idx][0][:]
+    v_desired = trajs[t_idx][1][:]      # your array second dimension is actually velocity
+    # You need a_desired too - compute numerical derivative:
+    v_next = trajs[t_idx+1][1][:]
+    a_desired = (v_next - v_desired) / dt
+    
+    # PD correction (optional but recommended)
+    pos_err = q_desired - q
+    vel_err = v_desired - vq
+
+    a = a_desired + Kp*pos_err + Kv*vel_err
+
+    tau = pin.rnea(robot.model, robot.data, q, vq, a)
+
+    sim.step(tau)
+    
+    # # From trajs get torques
+    # q_current = trajs[(int) (tcur/dt)][0][:]
+    # vq_current = trajs[(int) (tcur/dt)][1][:]
+
+    # torques = [0.0 for _ in sim.bulletCtrlJointsInPinOrder]
+    # sim.step(torques)
 
 if __name__ == "__main__":
         
@@ -42,6 +61,8 @@ if __name__ == "__main__":
     path = computepath(robot, cube, q0, qe, CUBE_PLACEMENT, CUBE_PLACEMENT_TARGET)
 
     
+
+    
     #setting initial configuration
     sim.setqsim(q0)
     
@@ -59,17 +80,21 @@ if __name__ == "__main__":
     
     
     #TODO this is just a random trajectory, you need to do this yourself
-    total_time=4.
-    trajs, time_steps = getTrajectory(robot, cube, path, P, I, D)
+    max_time = 10
+    trajs, time_steps = getTrajectory(robot, cube, path, max_time, P, I, D)
     
     total_time = time_steps[-1]
+    print(total_time)
 
     tcur = 0.
+
+    dt = total_time/(len(path)-2)
     
     
     while tcur < total_time:
-        rununtil(controllaw, DT, sim, robot, trajs, tcur, cube)
-        tcur += DT
+        # print("control loop iteration:", (int) (tcur/dt))
+        rununtil(controllaw, dt, sim, robot, trajs, tcur, cube)
+        tcur += dt
     
     
     
