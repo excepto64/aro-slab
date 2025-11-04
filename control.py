@@ -12,13 +12,15 @@ import pinocchio as pin
 from bezier import Bezier
     
 # in my solution these gains were good enough for all joints but you might want to tune this.
-Kp = 100.               # proportional gain (P of PD)
+Kp = 275.               # proportional gain (P of PD)
 Kv = 2 * np.sqrt(Kp)   # derivative gain (D of PD)
 
 def controllaw(sim, robot, trajs, tcurrent, cube):
     q, vq = sim.getpybulletstate()
     
     t_idx = (int) (tcurrent / dt)
+
+    print(t_idx)
 
     q_desired = trajs[t_idx][0][:]
     v_desired = trajs[t_idx][1][:]      # your array second dimension is actually velocity
@@ -43,6 +45,35 @@ def controllaw(sim, robot, trajs, tcurrent, cube):
     # torques = [0.0 for _ in sim.bulletCtrlJointsInPinOrder]
     # sim.step(torques)
 
+def controllawBezier(sim, robot, trajs, tcurrent, cube):
+    q, vq = sim.getpybulletstate()
+    
+    t_idx = (int) (tcurrent)
+
+
+    q_desired = trajs[t_idx][0].eval_horner(DT)
+    v_desired = trajs[t_idx][1].eval_horner(DT)
+    a_desired = trajs[t_idx][2].eval_horner(DT)
+    
+    print(q_desired, "\t", v_desired, "\t", a_desired)
+
+    # PD correction (optional but recommended)
+    pos_err = q_desired - q
+    vel_err = v_desired - vq
+
+    a = a_desired + Kp*pos_err + Kv*vel_err
+
+    tau = pin.rnea(robot.model, robot.data, q, vq, a)
+
+    q_current = pin.integrate(robot.model, q_desired, tau*DT)
+
+    data = robot.data.copy()  # Fresh data instance
+    pin.forwardKinematics(robot.model, data, q_current)
+    pin.updateFramePlacements(robot.model, data)  # Important!
+
+    sim.step(tau)
+    
+    
 if __name__ == "__main__":
         
     from tools import setupwithpybullet, setupwithpybulletandmeshcat, rununtil
@@ -54,15 +85,12 @@ if __name__ == "__main__":
     from config import CUBE_PLACEMENT, CUBE_PLACEMENT_TARGET    
     from inverse_geometry import computeqgrasppose
     from path import computepath
-    from trajectory import getTrajectory
+    from trajectory import getTrajectory1, getTrajBezier
     
     q0,successinit = computeqgrasppose(robot, robot.q0, cube, CUBE_PLACEMENT, None)
     qe,successend = computeqgrasppose(robot, robot.q0, cube, CUBE_PLACEMENT_TARGET,  None)
     path = computepath(robot, cube, q0, qe, CUBE_PLACEMENT, CUBE_PLACEMENT_TARGET)
 
-    
-
-    
     #setting initial configuration
     sim.setqsim(q0)
     
@@ -80,23 +108,32 @@ if __name__ == "__main__":
     
     
     #TODO this is just a random trajectory, you need to do this yourself
-    max_time = 60
-    trajs, time_steps = getTrajectory(robot, cube, path, max_time, P, I, D)
+    
+    max_time = 10
+    num_of_steps = 10
+    
+    # trajs, time_steps = getTrajectory1(robot, cube, path, max_time, P, I, D)
+    trajs, time_steps = getTrajBezier(robot, cube, path, max_time, num_of_steps)
     
     total_time = (int) (time_steps[-1])
-
-    print(total_time)
-
 
     tcur = 0.
 
     dt = max_time/(len(path)-2)
-    print(dt)
+
+    dt = max_time / num_of_steps
+
+    print("traj",len(trajs))
     
     
     while tcur < total_time:
+        print("tcur:", tcur, "\tt_total:", total_time)
         # print("control loop iteration:", (int) (tcur/dt), "of", (int) (total_time/dt))
-        rununtil(controllaw, dt, sim, robot, trajs, tcur, cube)
+
+        # rununtil(controllaw, dt, sim, robot, trajs, tcur, cube)
+        # tcur += dt
+
+        rununtil(controllawBezier, DT*1000, sim, robot, trajs, tcur, cube)
         tcur += dt
     
     
