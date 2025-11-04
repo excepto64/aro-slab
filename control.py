@@ -16,7 +16,11 @@ Kv = 2 * np.sqrt(Kp)   # derivative gain (D of PD)
 
 def controllaw(sim, robot, trajs, tcurrent, cube):
     q, vq = sim.getpybulletstate()
-    #TODO 
+    
+    # From trajs get torques
+    current_traj = trajs[tcurrent / DT]
+    print("current traj", current_traj)
+
     torques = [0.0 for _ in sim.bulletCtrlJointsInPinOrder]
     sim.step(torques)
 
@@ -31,10 +35,11 @@ if __name__ == "__main__":
     from config import CUBE_PLACEMENT, CUBE_PLACEMENT_TARGET    
     from inverse_geometry import computeqgrasppose
     from path import computepath
+    from trajectory import getTrajectory
     
     q0,successinit = computeqgrasppose(robot, robot.q0, cube, CUBE_PLACEMENT, None)
     qe,successend = computeqgrasppose(robot, robot.q0, cube, CUBE_PLACEMENT_TARGET,  None)
-    path = computepath(q0,qe,CUBE_PLACEMENT, CUBE_PLACEMENT_TARGET)
+    path = computepath(robot, cube, q0, qe, CUBE_PLACEMENT, CUBE_PLACEMENT_TARGET)
 
     
     #setting initial configuration
@@ -50,11 +55,15 @@ if __name__ == "__main__":
         vvq_of_t = vq_of_t.derivative(1)
         return q_of_t, vq_of_t, vvq_of_t
     
+    P, I, D = Kp, 1, Kv
+    
     
     #TODO this is just a random trajectory, you need to do this yourself
     total_time=4.
-    trajs = maketraj(q0, qe, total_time)   
+    trajs, time_steps = getTrajectory(robot, cube, path, P, I, D)
     
+    total_time = time_steps[-1]
+
     tcur = 0.
     
     
