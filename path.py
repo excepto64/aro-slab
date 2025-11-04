@@ -33,12 +33,12 @@ def computepath(robot, cube, qinit, qgoal, cubeplacementq0, cubeplacementqgoal):
     interpolation_steps = 200
     
     # Run RRT algorithm
-    G, pathFound = RRT(robot, cube, viz, qinit, qgoal, cubeplacementq0, cubeplacementqgoal, numberOfSamples4Search, deltaq)
+    G, pathFound = RRT(robot, cube, qinit, qgoal, cubeplacementq0, cubeplacementqgoal, numberOfSamples4Search, deltaq)
     
     # If a graph that connects the initial and goal configuration exists, get 
     # path through the graph.
     if pathFound:
-        print("Path found with", len(G), "nodes")
+        print("Connected graph found with", len(G), "nodes")
         return getPathFromGraph(G, robot, cube, interpolation_steps)
     else: 
         print("No path found")
@@ -62,15 +62,15 @@ def RRT(robot, cube, qinit, qgoal, cubeq0, cubeqgoal, k, deltaq):
 
     for i in range(k):
         # Get a random cube position and robot configuration.
-        qrand, cuberand = randomSampleRobotConfig(robot, cube, viz, cubeq0, cubeqgoal, G)
+        qrand, cuberand = randomSampleRobotConfig(robot, cube, cubeq0, cubeqgoal, G)
         # Get nearest vertex in the graph to qrand.
         qnear_index = getNearestVertex(G, qrand)
         cubenear = G[qnear_index][2]
         # Get the furthest configuration that can be reached by interpolation.
-        qnew, cubenew = newConfigNearObstacle(robot, qrand, cubenear, cuberand, steps4NewConf, delta_q, cube, viz)    
+        qnew, cubenew = newConfigNearObstacle(robot, qrand, cubenear, cuberand, steps4NewConf, delta_q, cube)    
         addValidEdgeAndVertex(G, qnear_index, qnew, cubenew)
         # Once graph is extended check if the new vertex can reach final config.
-        if validEdgeSE3(robot, qnew, cube, viz, cubenew, cubeqgoal, steps4ValidEdge):
+        if validEdgeSE3(robot, qnew, cube, cubenew, cubeqgoal, steps4ValidEdge):
             addValidEdgeAndVertex(G,len(G)-1,qgoal, cubeqgoal)
             return G, True
             
@@ -233,9 +233,9 @@ def getPathFromGraph(G, robot, cube, steps):
         
     config_path = [node[1]] + config_path
     cube_path = [node[2]] + cube_path
-        
+    print(f"Path found with {len(cube_path)} nodes.")    
     # Finds shortcuts that cut the length of the path
-    print(f"Finding shortcut... (original length: {len(cube_path)})")
+    print(f"Finding shortcut... ")
     shortcut_found = True
     while shortcut_found:
         config_path, cube_path, shortcut_found = shortcut(config_path, cube_path, robot, node[1], cube, steps)
@@ -253,7 +253,7 @@ def getPathFromGraph(G, robot, cube, steps):
     return path
 
 
-def shortcut(path, cube_path, robot, q, cube, viz, steps):
+def shortcut(path, cube_path, robot, q, cube, steps):
     """
     Find a shortcut in the cube path by removing unnecessary nodes if a
     connection exists between some other nodes, making the path shorter.
@@ -326,8 +326,8 @@ if __name__ == "__main__":
     
     
     q = robot.q0.copy()
-    q0,successinit = computeqgrasppose(robot, q, cube, CUBE_PLACEMENT, viz)
-    qe,successend = computeqgrasppose(robot, q, cube, CUBE_PLACEMENT_TARGET, viz)
+    q0,successinit = computeqgrasppose(robot, q, cube, CUBE_PLACEMENT)
+    qe,successend = computeqgrasppose(robot, q, cube, CUBE_PLACEMENT_TARGET)
     
     if not(successinit and successend):
         print ("error: invalid initial or end configuration")
