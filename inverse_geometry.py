@@ -45,7 +45,7 @@ def cost(q, robot, targetL, targetR):
     errR = norm(pin.log(effR.inverse() * targetR).vector)**2
     return errR + errL
 
-def computeqgrasppose(robot, qcurrent, cube, cubetarget):
+def computeqgrasppose(robot, qcurrent, cube, cubetarget, viz=None):
     '''
     Return a collision free configuration grasping a cube at a specific
     location and a success flag.
