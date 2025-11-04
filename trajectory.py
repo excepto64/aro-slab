@@ -17,16 +17,13 @@ def getTrajectory(robot, cube, path, max_time, P, I, D):
     dt = t_end/(len(path)-2)
     time_steps = np.arange(t_start, t_end + dt, dt)
 
-    print(len(path))
-    print(len(time_steps))
-
     trajectories = np.empty([len(time_steps), 2, len(path[0])])
 
     print(trajectories.shape)
 
 
     for i in range(len(time_steps)-1):
-        print("At time step" , i, "of", len(time_steps))
+        # print("At time step" , i, "of", len(time_steps))
         q_current = path[i]
         q_current_goal = path[i+1]
 
@@ -101,8 +98,9 @@ if __name__ == "__main__":
 
 
     P, I, D = 10, 1, 1
+    max_time = 10
 
-    trajs, time_steps = getTrajectory(robot, cube, path, P, I, D)
+    trajs, time_steps = getTrajectory(robot, cube, path, max_time, P, I, D)
     print("trajectory array length:", len(trajs))
     
     print(len(path))

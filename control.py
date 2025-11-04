@@ -80,19 +80,22 @@ if __name__ == "__main__":
     
     
     #TODO this is just a random trajectory, you need to do this yourself
-    max_time = 10
+    max_time = 60
     trajs, time_steps = getTrajectory(robot, cube, path, max_time, P, I, D)
     
-    total_time = time_steps[-1]
+    total_time = (int) (time_steps[-1])
+
     print(total_time)
+
 
     tcur = 0.
 
-    dt = total_time/(len(path)-2)
+    dt = max_time/(len(path)-2)
+    print(dt)
     
     
     while tcur < total_time:
-        # print("control loop iteration:", (int) (tcur/dt))
+        # print("control loop iteration:", (int) (tcur/dt), "of", (int) (total_time/dt))
         rununtil(controllaw, dt, sim, robot, trajs, tcur, cube)
         tcur += dt
     
