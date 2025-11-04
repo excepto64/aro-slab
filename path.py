@@ -13,14 +13,13 @@ from inverse_geometry import computeqgrasppose
 from config import LEFT_HAND
 import time
 
-def computepath(robot, cube, viz, qinit, qgoal, cubeplacementq0, cubeplacementqgoal):
+def computepath(robot, cube, qinit, qgoal, cubeplacementq0, cubeplacementqgoal):
     """
     Return a collision free path from qinit to qgoal under grasping constraints
     the path is expressed as a list of configurations.
     Args:
         robot (RobotWrapper): The robot.
         cube (RobotWrapper): The cube.
-        viz (Meshcat): Visualiser
         qinit (numpy.ndarray): Initial configuration.
         qgoal (numpy.ndarray): Final configuration.
         cubeplacementq0 (pin.SE3): Initial cube placement.
@@ -40,14 +39,14 @@ def computepath(robot, cube, viz, qinit, qgoal, cubeplacementq0, cubeplacementqg
     # path through the graph.
     if pathFound:
         print("Path found with", len(G), "nodes")
-        return getPathFromGraph(G, robot, cube, viz, interpolation_steps)
+        return getPathFromGraph(G, robot, cube, interpolation_steps)
     else: 
         print("No path found")
         return []
     
 
     
-def RRT(robot, cube, viz, qinit, qgoal, cubeq0, cubeqgoal, k, deltaq):
+def RRT(robot, cube, qinit, qgoal, cubeq0, cubeqgoal, k, deltaq):
     """
     Create a graph of connected nodes in the space, spreading outwardly from
     the initial configuration and terminating when the final configuration is
@@ -79,7 +78,7 @@ def RRT(robot, cube, viz, qinit, qgoal, cubeq0, cubeqgoal, k, deltaq):
     
 
     
-def randomSampleRobotConfig(robot, cube, viz, cubeq0, cubeqgoal, G):
+def randomSampleRobotConfig(robot, cube, cubeq0, cubeqgoal, G):
     """
     Sample a cube placement from the space and the compute configuration that
     grasps the cube.
@@ -106,7 +105,7 @@ def randomSampleRobotConfig(robot, cube, viz, cubeq0, cubeqgoal, G):
         RANDOM_CUBE_PLACEMENT = pin.SE3(randomRotation, randomSample)
   
         if not duplicateCube(G, RANDOM_CUBE_PLACEMENT):
-            config, validConfig = computeqgrasppose(robot, q, cube, RANDOM_CUBE_PLACEMENT, viz)
+            config, validConfig = computeqgrasppose(robot, q, cube, RANDOM_CUBE_PLACEMENT)
                   
     return config, RANDOM_CUBE_PLACEMENT
 
@@ -148,19 +147,19 @@ def getNearestVertex(G, qrand):
     return idx
 
 
-def newConfigNearObstacle(robot, q, cubenear, cuberand, steps4NewConf, delta_q, cube, viz):
+def newConfigNearObstacle(robot, q, cubenear, cuberand, steps4NewConf, delta_q, cube):
     """
     Interpolates up to obstacle, and finds a configuration right before the obstacle.
     """
     dist = distanceSE3(cubenear, cuberand)
-    qprevious, _ = computeqgrasppose(robot, q, cube, cubenear, viz)
+    qprevious, _ = computeqgrasppose(robot, q, cube, cubenear)
     cubeprevious = cubenear
     
     if delta_q is not None and dist > delta_q:
         cubeprevious = interpolationSE3(cubenear, cuberand, delta_q/dist)
-        qprevious, validConfig = computeqgrasppose(robot, q, cube, cubeprevious, viz)
+        qprevious, validConfig = computeqgrasppose(robot, q, cube, cubeprevious)
         
-    conf_path, cube_path = interPath(robot, q, cube, viz, cubenear, cuberand, steps4NewConf)
+    conf_path, cube_path = interPath(robot, q, cube, cubenear, cuberand, steps4NewConf)
     
     if len(conf_path) != 0 and len(cube_path) != 0: 
         return conf_path[-1], cube_path[-1]
@@ -184,7 +183,7 @@ def interpolationSE3(q0, q1, t):
     return pin.SE3(qrot, p)
 
 
-def interPath(robot, q_start, cube, viz, q0, q1, steps):
+def interPath(robot, q_start, cube, q0, q1, steps):
     """
     Interpolate the path of the robot and the cube.
     """
@@ -194,7 +193,7 @@ def interPath(robot, q_start, cube, viz, q0, q1, steps):
 
     for step in range(steps):
         cubeq = interpolationSE3(q0, q1, step / steps)
-        q_next, validConfig = computeqgrasppose(robot, q_current, cube, cubeq, viz)
+        q_next, validConfig = computeqgrasppose(robot, q_current, cube, cubeq)
 
         if not validConfig:
             break  
@@ -205,19 +204,19 @@ def interPath(robot, q_start, cube, viz, q0, q1, steps):
     return inter_path_configs, inter_path_cubes
     
 
-def validEdgeSE3(robot, q, cube, viz, cubeq0, cubeqgoal, steps):
+def validEdgeSE3(robot, q, cube, cubeq0, cubeqgoal, steps):
     """
     Check if a given edge is valid, ensuring there are no collisions.
     """
     for step in range(steps):
         cubeq = interpolationSE3(cubeq0, cubeqgoal, step/steps)
-        q, validConfig = computeqgrasppose(robot, q, cube, cubeq, viz)
+        q, validConfig = computeqgrasppose(robot, q, cube, cubeq)
         if not validConfig:
             return False
     return True
 
 
-def getPathFromGraph(G, robot, cube, viz, steps):
+def getPathFromGraph(G, robot, cube, steps):
     """
     Extract an efficient path through the graph, both in the configuration 
     space and in the cube's space.  
@@ -239,13 +238,13 @@ def getPathFromGraph(G, robot, cube, viz, steps):
     print(f"Finding shortcut... (original length: {len(cube_path)})")
     shortcut_found = True
     while shortcut_found:
-        config_path, cube_path, shortcut_found = shortcut(config_path, cube_path, robot, node[1], cube, viz, steps)
-    print(f"Shortcut found with {len(config_path)} nodes. Starting interpolation.")
+        config_path, cube_path, shortcut_found = shortcut(config_path, cube_path, robot, node[1], cube, steps)
+    print(f"Shortcut found with {len(config_path)} nodes. Starting interpolation...")
 
     # Interpolate to get a smooth path.
     for i in range(len(config_path) - 1):
         path += [config_path[i]]
-        configs, _ = interPath(robot, node[1], cube, viz, cube_path[i], cube_path[i+1], steps)
+        configs, _ = interPath(robot, node[1], cube, cube_path[i], cube_path[i+1], steps)
 
         path += configs
         
@@ -262,7 +261,7 @@ def shortcut(path, cube_path, robot, q, cube, viz, steps):
     for i, cubeq in enumerate(cube_path):
         for j in reversed(range(i+2,len(cube_path))):
             cubeq2 = cube_path[j]
-            if validEdgeSE3(robot, q, cube, viz, cubeq, cubeq2, steps):
+            if validEdgeSE3(robot, q, cube, cubeq, cubeq2, steps):
                 path = path[:i+1]+ path[j:]
                 cube_path = cube_path[:i+1]+ cube_path[j:]
                 return path, cube_path, True
@@ -333,6 +332,6 @@ if __name__ == "__main__":
     if not(successinit and successend):
         print ("error: invalid initial or end configuration")
     
-    path = computepath(robot, cube, viz, q0, qe, CUBE_PLACEMENT, CUBE_PLACEMENT_TARGET)
+    path = computepath(robot, cube, q0, qe, CUBE_PLACEMENT, CUBE_PLACEMENT_TARGET)
     
     displaypath(robot,cube,path,dt=0.005,viz=viz) #you ll probably want to lower dt

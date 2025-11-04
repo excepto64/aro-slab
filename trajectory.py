@@ -8,29 +8,35 @@ import time
 
 
 
-def getTrajectory(robot, cube, viz, path):
-    print("getting Trajectory")
+def getTrajectory(robot, cube, path, max_time, P, I, D):
+    print("Getting Trajectory")
     t_start = 0
-    t_end = 1
-    dt = t_end/len(path)
+    t_end = max_time
+
+    # len(path) - 2 to make len(path) 1 longer than len(time_steps) 
+    dt = t_end/(len(path)-2)
     time_steps = np.arange(t_start, t_end + dt, dt)
-    P, I, D = 1, 1, 1
+
+    trajectories = np.empty([len(time_steps), 2, len(path[0])])
+
+    print(trajectories.shape)
 
 
-    trajectories = []
-
-
-    for i, t in enumerate(time_steps):
-        print("At time step" , i, "of", len(time_steps))
+    for i in range(len(time_steps)-1):
+        # print("At time step" , i, "of", len(time_steps))
         q_current = path[i]
         q_current_goal = path[i+1]
 
-        trajectories.append(stepThroughPath(robot, cube, viz, q_current, q_current_goal, P, I, D))
+        trajectories[i][0] = q_current
+        trajectories[i][1] = q_current_goal - q_current
 
-    return trajectories
+        # trajectories += [stepThroughPath(robot, cube, q_current, q_current_goal, P, I, D)]
+
+    trajectories += [trajectories[-1]]
+    return trajectories, time_steps
 
 
-def stepThroughPath(robot, cube, viz, q_current, q_current_goal, k_p, k_i, k_d):
+def stepThroughPath(robot, cube, q_current, q_current_goal, k_p, k_i, k_d):
 
     error = q_current_goal - q_current
     q_prev = q_current
@@ -46,20 +52,21 @@ def stepThroughPath(robot, cube, viz, q_current, q_current_goal, k_p, k_i, k_d):
         u = (k_p * error) + (k_d * error_d) + (k_i * error_i)
 
         # Do I need to save q_current like this? I should probably sense q somehow
-        q_current = pin.integrate(robot.model, q_current, u*DT)
-        trajectories.append(u)
+        q_current = pin.integrate(robot.model, q_current, u*DT*5)
+        trajectories += [u]
 
         data = robot.data.copy()  # Fresh data instance
         pin.forwardKinematics(robot.model, data, q_current)
         pin.updateFramePlacements(robot.model, data)  # Important!
 
-        # For visuialiser
-        effL = data.oMf[robot.model.getFrameId(LEFT_HAND)] 
-        cube_pos = getcubeplacement(cube)
-        eMc = effL.inverse() * cube_pos
+        # # For visuialiser
+        # effL = data.oMf[robot.model.getFrameId(LEFT_HAND)] 
+        # cube_pos = getcubeplacement(cube)
+        # eMc = effL.inverse() * cube_pos
         
-        viz.display(q_current)
-        setcubeplacement(robot, cube, effL * eMc)
+        # cube_pos =  effL * eMc
+        # setcubeplacement(robot, cube, cube_pos)
+        # viz.display(q_current)
 
         q_prev = q_current
 
@@ -87,8 +94,19 @@ if __name__ == "__main__":
     if not(successinit and successend):
         print ("error: invalid initial or end configuration")
     
-    path = computepath(robot, cube, viz, q0, qe, CUBE_PLACEMENT, CUBE_PLACEMENT_TARGET)
-    
+    path = computepath(robot, cube, q0, qe, CUBE_PLACEMENT, CUBE_PLACEMENT_TARGET)
 
-    trajs = getTrajectory(robot, cube, viz, path)
-    print(trajs)
+
+    P, I, D = 10, 1, 1
+    max_time = 10
+
+    trajs, time_steps = getTrajectory(robot, cube, path, max_time, P, I, D)
+    print("trajectory array length:", len(trajs))
+    
+    print(len(path))
+    print(len(time_steps))
+    print(len(trajs))
+
+    # print(trajs[1])
+    # print(path[0])
+    # print(path[0]==path[1])
