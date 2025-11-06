@@ -32,11 +32,13 @@ def computepath(robot, cube, qinit, qgoal, cubeplacementq0, cubeplacementqgoal):
     deltaq = 3
     interpolation_steps = 200
     
-    # Should RRT pass robot q 
+    # Run RRT algorithm
     G, pathFound = RRT(robot, cube, qinit, qgoal, cubeplacementq0, cubeplacementqgoal, numberOfSamples4Search, deltaq)
     
+    # If a graph that connects the initial and goal configuration exists, get 
+    # path through the graph.
     if pathFound:
-        print("Path found with", len(G), "nodes")
+        print("Connected graph found with", len(G), "nodes")
         return getPathFromGraph(G, robot, cube, interpolation_steps)
     else: 
         print("No path found")
@@ -59,13 +61,15 @@ def RRT(robot, cube, qinit, qgoal, cubeq0, cubeqgoal, k, deltaq):
     print("Computing path...")
 
     for i in range(k):
-        
+        # Get a random cube position and robot configuration.
         qrand, cuberand = randomSampleRobotConfig(robot, cube, cubeq0, cubeqgoal, G)
+        # Get nearest vertex in the graph to qrand.
         qnear_index = getNearestVertex(G, qrand)
-        cubenear = G[qnear_index][2]      
+        cubenear = G[qnear_index][2]
+        # Get the furthest configuration that can be reached by interpolation.
         qnew, cubenew = newConfigNearObstacle(robot, qrand, cubenear, cuberand, steps4NewConf, delta_q, cube)    
         addValidEdgeAndVertex(G, qnear_index, qnew, cubenew)
-        
+        # Once graph is extended check if the new vertex can reach final config.
         if validEdgeSE3(robot, qnew, cube, cubenew, cubeqgoal, steps4ValidEdge):
             addValidEdgeAndVertex(G,len(G)-1,qgoal, cubeqgoal)
             return G, True
@@ -229,14 +233,15 @@ def getPathFromGraph(G, robot, cube, steps):
         
     config_path = [node[1]] + config_path
     cube_path = [node[2]] + cube_path
-        
+    print(f"Path found with {len(cube_path)} nodes.")    
     # Finds shortcuts that cut the length of the path
-    print(f"Finding shortcut... (original length: {len(cube_path)})")
+    print(f"Finding shortcut... ")
     shortcut_found = True
     while shortcut_found:
         config_path, cube_path, shortcut_found = shortcut(config_path, cube_path, robot, node[1], cube, steps)
     print(f"Shortcut found with {len(config_path)} nodes. Starting interpolation...")
 
+    # Interpolate to get a smooth path.
     for i in range(len(config_path) - 1):
         path += [config_path[i]]
         configs, _ = interPath(robot, node[1], cube, cube_path[i], cube_path[i+1], steps)
@@ -248,12 +253,10 @@ def getPathFromGraph(G, robot, cube, steps):
     return path
 
 
-# Shortcut with cubes? 
 def shortcut(path, cube_path, robot, q, cube, steps):
     """
-    Find shortcuts in the cube path by removing unnecessary nodes if a
+    Find a shortcut in the cube path by removing unnecessary nodes if a
     connection exists between some other nodes, making the path shorter.
-    Only takes the first found shortcut.
     """
     for i, cubeq in enumerate(cube_path):
         for j in reversed(range(i+2,len(cube_path))):
@@ -266,25 +269,36 @@ def shortcut(path, cube_path, robot, q, cube, steps):
 
 
 def distance(q1, q2):
+    """
+    Euclidian distance betweeen 2 configurations.
+    """
     distance = np.linalg.norm(q2-q1)
     return distance
 
 
 def distanceSE3(q1, q2):
+    """
+    Distance between two SE3 poses.
+    """
     distance = pin.log(q1.inverse()*q2).vector
     return distance
 
 
-def displaypath(robot,cube,path,dt, viz):
+def displaypath(robot,cube,path,dt,viz):
+    """
+    Display the path, updating the configuration and cube position.
+    """
+    # Get the difference between the cube's centre and the left end effector.
     q_new = path[-1].copy()
     data = robot.data.copy()  # Fresh data instance
     pin.forwardKinematics(robot.model, data, q_new)
-    pin.updateFramePlacements(robot.model, data)  # Important!
+    pin.updateFramePlacements(robot.model, data)
     frameL = robot.model.getFrameId(LEFT_HAND)
     effL = data.oMf[frameL] 
     cube_pos = getcubeplacement(cube)
     eMc = effL.inverse() * cube_pos
 
+    # Display the configuration and cube position.
     for q in path:
         viz.display(q)
         setcubeplacement(robot, cube, getcube(robot, q, eMc))
@@ -292,6 +306,9 @@ def displaypath(robot,cube,path,dt, viz):
         
         
 def getcube(robot, q, eMc):
+    """
+    Get position for cube attached to the left effector.
+    """
     data = robot.data.copy()  # Fresh data instance
     pin.forwardKinematics(robot.model, data, q)
     pin.updateFramePlacements(robot.model, data)  # Important!
@@ -309,12 +326,13 @@ if __name__ == "__main__":
     
     
     q = robot.q0.copy()
-    q0,successinit = computeqgrasppose(robot, q, cube, CUBE_PLACEMENT, viz)
-    qe,successend = computeqgrasppose(robot, q, cube, CUBE_PLACEMENT_TARGET, viz)
+    q0,successinit = computeqgrasppose(robot, q, cube, CUBE_PLACEMENT)
+    qe,successend = computeqgrasppose(robot, q, cube, CUBE_PLACEMENT_TARGET)
     
     if not(successinit and successend):
         print ("error: invalid initial or end configuration")
     
     path = computepath(robot, cube, q0, qe, CUBE_PLACEMENT, CUBE_PLACEMENT_TARGET)
-    
+    # path = np.loadtxt('path.txt')
+
     displaypath(robot,cube,path,dt=0.005,viz=viz) #you ll probably want to lower dt

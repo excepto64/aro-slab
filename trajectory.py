@@ -10,7 +10,10 @@ from setup_meshcat import updatevisuals
 
 
 
-def getTrajectory1(robot, cube, path, max_time, P, I, D):
+def getTrajectory(robot, cube, path, max_time, P, I, D):
+    """
+    Get the trajectory given the path.
+    """
     print("Getting Trajectory")
     t_start = 0
     t_end = max_time
@@ -28,8 +31,9 @@ def getTrajectory1(robot, cube, path, max_time, P, I, D):
         # print("At time step" , i, "of", len(time_steps))
         q_current = path[i]
         q_current_goal = path[i+1]
-
+        # Configuration.
         trajectories[i][0] = q_current
+        # Velocity/change.
         trajectories[i][1] = q_current_goal - q_current
 
         # trajectories += [stepThroughPath(robot, cube, q_current, q_current_goal, P, I, D)]
@@ -147,13 +151,13 @@ if __name__ == "__main__":
     from path import computepath, displaypath
     from bezier import Bezier
     
-    robot, cube, viz = setupwithmeshcat(url="tcp://127.0.0.1:6003")
+    robot, cube, viz = setupwithmeshcat(url="tcp://127.0.0.1:6000")
     
     q = robot.q0.copy()
     pin.framesForwardKinematics(robot.model,robot.data,q)
 
-    q0,successinit = computeqgrasppose(robot, q, cube, CUBE_PLACEMENT, viz)
-    qe,successend = computeqgrasppose(robot, q, cube, CUBE_PLACEMENT_TARGET,  viz)
+    q0,successinit = computeqgrasppose(robot, q, cube, CUBE_PLACEMENT)
+    qe,successend = computeqgrasppose(robot, q, cube, CUBE_PLACEMENT_TARGET)
     
     if not(successinit and successend):
         print ("error: invalid initial or end configuration")
