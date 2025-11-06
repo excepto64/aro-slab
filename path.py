@@ -333,5 +333,6 @@ if __name__ == "__main__":
         print ("error: invalid initial or end configuration")
     
     path = computepath(robot, cube, q0, qe, CUBE_PLACEMENT, CUBE_PLACEMENT_TARGET)
-    
+    # path = np.loadtxt('path.txt')
+
     displaypath(robot,cube,path,dt=0.005,viz=viz) #you ll probably want to lower dt
