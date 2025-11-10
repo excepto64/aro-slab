@@ -161,8 +161,14 @@ def controllawHighPID(sim, robot, trajs, tcurrent, tmax, cube, dt = DT):
     # tau = pin.rnea(robot.model, robot.data, q, vq, a)#, [robomass]) #, [f_ext]) <---- Find adequate exterior forces e.g. mass of the robot
     tau = pin.rnea(robot.model, robot.data, q, vq, a)
 
-    # PID correction torque
-    # tau_control = (Kp_phase * q_err) + (Kd_phase * v_err) + (Ki_phase * int_err)
+    '''
+    Extension for obstacle avoidance:
+    Access obstacles from config (or pin.getObstacles type function to get all 
+    obstacles in a sim / environment) and check q against it every step. If 
+    for any step q is within some threshold of any obstacle, access that 
+    obstacles q, use similar process to grasp force to find a small tau to add 
+    to the final tau to move away from the obstacle.
+    '''    
 
 
     # Add "grasp force" so the cube does not get dropped
