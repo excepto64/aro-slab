@@ -17,6 +17,8 @@ KiHP = 0.2 * KpHP
 KdHP = 2 * np.sqrt(KpHP)
 grasp_forceHP = 1800
 
+COLLISION_THRESHOLD = 1e-3
+
 
 # Constants:
 Kp = 25
@@ -195,6 +197,80 @@ def controllawHighPID(sim, robot, trajs, tcurrent, tmax, cube, dt = DT):
     # Add grasp force to overall tau and step
     tau += tau_grasp 
     sim.step(tau)
+
+    # Recursive loop to drag q back onto the path if it strays too far from 
+    # obstacleAvoidanceTau(sim, robot, trajs, tcurrent, tmax, cube, dt)
+
+
+def runControlLaw(sim, robot, cube, path, num_of_steps, max_time):
+    
+    trajs, time_steps = getTrajBezier(robotsim, cubesim, path, max_time, num_of_steps)
+
+    tcurrent = 0.
+    dt = max_time/(len(time_steps))
+
+    while tcurrent < max_time:
+        controllawHighPID(sim, robot, trajs, tcurrent, max_time, cube, dt)
+        # rununtil(controllaw, sim, robotsim, trajs, tcur, cubesim, dt)
+        tcurrent += dt
+        time.sleep(0.01)
+    time.sleep(3)
+
+
+# Extensions:
+def obstacleAvoidanceTau(sim, robot, trajs, tcurrent, tmax, cube, dt=DT):
+
+    
+    q = trajs(tcurrent)
+
+    colDist = collisionDistance(robot, q)
+
+
+
+    if colDist < COLLISION_THRESHOLD:
+        print("Avoiding Obstacle")
+        print(COLLISION_THRESHOLD)
+        # getCollTau(robot, q)
+        controllawHighPID(sim, robot, trajs, tcurrent, tmax, cube, dt)
+    else:
+        return
+    
+
+
+def getCollTau(robot, q, trajs, tcurrent):
+
+
+    # expectedq = trajs(tcurrent)
+
+    # return pin.rnea(robot.model, robot.data, expectedq, np.zeros_like(q), np.zeros_like(q))
+    return
+
+def collisionDistance(robot, q):
+     '''Return the minimal distance between robot and environment. '''
+     pin.updateGeometryPlacements(robot.model,robot.data,robot.collision_model,robot.collision_data, q)
+     if pin.computeCollisions(robot.collision_model,robot.collision_data, False): 0
+     idx = pin.computeDistances(robot.collision_model,robot.collision_data)
+     return robot.collision_data.distanceResults[idx].min_distance
+
+
+
+
+def replanner(sim, robot, cube):
+    q0, successinit = computeqgrasppose(robotsim, robotsim.q0, cubesim, CUBE_PLACEMENT, None)
+    qe, successend = computeqgrasppose(robotsim, robotsim.q0, cubesim, CUBE_PLACEMENT_TARGET,  None)
+    if successinit and successend:
+        path = computepath(robotsim, cubesim, q0, qe, CUBE_PLACEMENT, CUBE_PLACEMENT_TARGET)
+    else:
+        print("No path available")
+        return
+    max_time = 1
+    num_of_steps = 1000
+
+    runControlLaw(sim, robot, cube, path, num_of_steps, max_time)
+    return
+
+
+
     
 
     
@@ -224,25 +300,13 @@ if __name__ == "__main__":
     #setting initial configuration
     sim.setqsim(q0)
     sim.setTorqueControlMode()
-    
+
+    # COLLISION_THRESHOLD = min(collisionDistance(robot, q) for q in path)
 
     max_time = 1
     num_of_steps = 1000
     
-    trajs, time_steps = getTrajBezier(robot, cube, path, max_time, num_of_steps)
+    int_err = np.zeros_like(path[0])
 
-    tcur = 0.
-    dt = max_time/(len(time_steps))
-
-    # displaypath(robot, cube, path, 1/500, viz)
-    
-    int_err = np.zeros_like(trajs(0))
-
-
-    while tcur < max_time:
-        controllawHighPID(sim, robotsim,trajs, tcur, max_time, cubesim, dt)
-        # rununtil(controllaw, sim, robotsim, trajs, tcur, cubesim, dt)
-        tcur += dt
-        time.sleep(0.01)
-    time.sleep(3)
+    runControlLaw(sim, robot, cube, path, num_of_steps, max_time)
     
