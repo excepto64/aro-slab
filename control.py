@@ -12,17 +12,13 @@ from config import LEFT_HAND, RIGHT_HAND, LEFT_HOOK, RIGHT_HOOK, DT
 from tools import getcubeplacement
 
 # Constants:
-KpHP = 18000
-KdHP = 2.0 * np.sqrt(KpHP)
-grasp_forceHP = 1800
-
-gains_high = [KpHP, KdHP, grasp_forceHP]
-
-
-# Constants:
 Kp = 300
 Kd = 2.0 * np.sqrt(Kp)
 grasp_force = 50.
+
+cube_mass = 0.14
+g = 9.81
+v_inertia = 40
 
 gains_normal = [Kp, Kd, grasp_force]
 
@@ -50,16 +46,19 @@ def controllaw(sim, robot, trajs, tcurrent, tmax, cube, gains, dt = DT):
 
     tau = pin.rnea(robot.model, robot.data, q, vq, a)
 
+    # Add force to figth gravity
+    f_g = 0.5 * cube_mass * g * v_inertia
+
     # Add "grasp force" so the cube does not get dropped
     # For left hand
     idx_L = robot.model.getFrameId(LEFT_HAND)
     J_L = pin.computeFrameJacobian(robot.model, robot.data, q, idx_L, pin.LOCAL_WORLD_ALIGNED)
-    f_left = np.array([0., -1., 0., 0., 0., 0.]) * force
+    f_left = np.array([0., -force, f_g, 0., 0., 0.])
 
     # For right hand
     idx_R = robot.model.getFrameId(RIGHT_HAND)
     J_R = pin.computeFrameJacobian(robot.model, robot.data, q, idx_R, pin.LOCAL_WORLD_ALIGNED)
-    f_right = np.array([0., 1., 0., 0., 0., 0.]) * force
+    f_right = np.array([0., force, f_g, 0., 0., 0.])
 
     tau_grasp = J_R.T @ f_right + J_L.T @ f_left
 
@@ -96,7 +95,7 @@ if __name__ == "__main__":
     sim.setqsim(q0)
     sim.setTorqueControlMode()
 
-    max_time = 1
+    max_time = 2
     num_of_steps = 1000
     
     trajs, time_steps = getTrajBezier(robot, cube, path, max_time, num_of_steps)
@@ -107,7 +106,7 @@ if __name__ == "__main__":
     int_err = np.zeros_like(trajs(0))
 
     while tcur < max_time:
-        controllaw(sim, robot, trajs, tcur, max_time, cube, gains_high, dt)
+        controllaw(sim, robot, trajs, tcur, max_time, cube, gains_normal, dt)
 
         tcur += dt
         time.sleep(0.01)
