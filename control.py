@@ -13,22 +13,18 @@ from tools import getcubeplacement
 
 # Constants:
 KpHP = 18000
-KiHP = 1.0 * KpHP
-KdHP = 2 * np.sqrt(KpHP)
+KdHP = 2.0 * np.sqrt(KpHP)
 grasp_forceHP = 1800
 
-gains_high = [KpHP, KiHP, KdHP, grasp_forceHP]
+gains_high = [KpHP, KdHP, grasp_forceHP]
 
 
 # Constants:
 Kp = 300
-Ki = 1.0 * Kp 
 Kd = 2.0 * np.sqrt(Kp)
-grasp_force = 300
+grasp_force = 50.
 
-gains_normal = [Kp, Ki, Kd, grasp_force]
-
-INT_DECAY = 0.98
+gains_normal = [Kp, Kd, grasp_force]
 
 def controllaw(sim, robot, trajs, tcurrent, tmax, cube, gains, dt = DT):
     global int_err 
@@ -37,7 +33,6 @@ def controllaw(sim, robot, trajs, tcurrent, tmax, cube, gains, dt = DT):
     pin.updateFramePlacements(robot.model, robot.data)
     pin.framesForwardKinematics(robot.model, robot.data, q)
 
-    
     # Get desired q, v, a
     q_desired = trajs(tcurrent)
     v_desired = trajs.derivative(1)(tcurrent)
@@ -47,62 +42,29 @@ def controllaw(sim, robot, trajs, tcurrent, tmax, cube, gains, dt = DT):
     q_err = q_desired - q
     v_err = v_desired - vq
     
-    # Decay of integral error
-    int_err *= INT_DECAY
-    int_err += q_err * dt 
+    Kp = gains[0]
+    Kd = gains[1]
+    force = gains[2]
 
-    # Reduce gains when lowering the cube
-    t_lowering = tmax * 0.9
-
-    
-    Kp_phase = gains[0]
-    Ki_phase = gains[1]
-    Kd_phase = gains[2]
-    force_phase = gains[3]
-
-    a = a_desired + (Kp_phase * q_err) + (Kd_phase*v_err) + (Ki_phase * int_err)
-
-    # # Dampen hand joint accelerations
-    # hand_damping = 10  # Reduce to 10% of commanded acceleration
-    # a[8] *= hand_damping   # left hand
-    # a[14] *= hand_damping  # right hand
+    a = a_desired + (Kp * q_err) + (Kd * v_err)
 
     tau = pin.rnea(robot.model, robot.data, q, vq, a)
 
     # Add "grasp force" so the cube does not get dropped
     # For left hand
     idx_L = robot.model.getFrameId(LEFT_HAND)
-    oML = robot.data.oMf[idx_L]
-    oMcubeL = getcubeplacement(cube, LEFT_HOOK)
-    trans_err = oMcubeL.translation - oML.translation
-    rot_err = pin.log3(oMcubeL.rotation @ oML.rotation.T)
-    wrenchL = pin.Motion(np.hstack((trans_err * force_phase, rot_err)) )
     J_L = pin.computeFrameJacobian(robot.model, robot.data, q, idx_L, pin.LOCAL_WORLD_ALIGNED)
+    f_left = np.array([0., -1., 0., 0., 0., 0.]) * force
 
     # For right hand
     idx_R = robot.model.getFrameId(RIGHT_HAND)
-    oMR = robot.data.oMf[idx_R]
-    oMcubeR = getcubeplacement(cube, RIGHT_HOOK)
-    trans_err = oMcubeR.translation - oMR.translation
-    rot_err = pin.log3(oMcubeR.rotation @ oMR.rotation.T)
-    wrenchR = pin.Motion(np.hstack((trans_err * force_phase, rot_err)) )
     J_R = pin.computeFrameJacobian(robot.model, robot.data, q, idx_R, pin.LOCAL_WORLD_ALIGNED)
+    f_right = np.array([0., 1., 0., 0., 0., 0.]) * force
 
-    cube_mass = 0.14  # kg, whatever your cube weighs
-    g = np.array([0, 0, 9.81])
-    cube_weight_force = cube_mass * g
-
-    # Add upward force at both hands to support cube
-    wrenchL.linear += cube_weight_force / 2
-    wrenchR.linear += cube_weight_force / 2
-
-    tau_grasp = J_R.T @ wrenchR.vector - J_L.T @ wrenchL.vector
+    tau_grasp = J_R.T @ f_right + J_L.T @ f_left
 
     # # Add grasp force to overall tau and step
     tau += tau_grasp 
-    if int(tcurrent*1000) % 10 == 0:
-        print(f"a[8]: {a[8]}, a[14]: {a[14]}. q[8]: {q[8]}, q[14]: {q[14]}")
-        print(f"q_err[8]: {q_err[8]}, q_err[14]: {q_err[14]}. tau[8]: {tau[8]}, tau[14]: {tau[14]}")
 
     sim.step(tau)
     
@@ -128,14 +90,14 @@ if __name__ == "__main__":
     #np.savetxt('path_long.txt', path)
     path = np.loadtxt('path.txt')
 
-    displaypath(robot, cube, path, 0.01, viz)
+    #displaypath(robot, cube, path, 0.001, viz)
 
     #setting initial configuration
     sim.setqsim(q0)
     sim.setTorqueControlMode()
 
     max_time = 1
-    num_of_steps = 600
+    num_of_steps = 1000
     
     trajs, time_steps = getTrajBezier(robot, cube, path, max_time, num_of_steps)
 
@@ -145,7 +107,7 @@ if __name__ == "__main__":
     int_err = np.zeros_like(trajs(0))
 
     while tcur < max_time:
-        controllaw(sim, robot, trajs, tcur, max_time, cube, gains_normal, dt)
+        controllaw(sim, robot, trajs, tcur, max_time, cube, gains_high, dt)
 
         tcur += dt
         time.sleep(0.01)
