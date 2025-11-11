@@ -13,7 +13,7 @@ from tools import getcubeplacement
 
 # Constants:
 KpHP = 18000
-KiHP = 0.0 * KpHP
+KiHP = 1.0 * KpHP
 KdHP = 2 * np.sqrt(KpHP)
 grasp_forceHP = 1800
 
@@ -22,7 +22,7 @@ gains_high = [KpHP, KiHP, KdHP, grasp_forceHP]
 
 # Constants:
 Kp = 300
-Ki = 0.0 * Kp 
+Ki = 1.0 * Kp 
 Kd = 2.0 * np.sqrt(Kp)
 grasp_force = 300
 
@@ -88,13 +88,13 @@ def controllaw(sim, robot, trajs, tcurrent, tmax, cube, gains, dt = DT):
     wrenchR = pin.Motion(np.hstack((trans_err * force_phase, rot_err)) )
     J_R = pin.computeFrameJacobian(robot.model, robot.data, q, idx_R, pin.LOCAL_WORLD_ALIGNED)
 
-    # cube_mass = 0.14  # kg, whatever your cube weighs
-    # g = np.array([0, 0, 9.81])
-    # cube_weight_force = cube_mass * g
+    cube_mass = 0.14  # kg, whatever your cube weighs
+    g = np.array([0, 0, 9.81])
+    cube_weight_force = cube_mass * g
 
-    # # Add upward force at both hands to support cube
-    # wrenchL.linear += cube_weight_force / 2
-    # wrenchR.linear += cube_weight_force / 2
+    # Add upward force at both hands to support cube
+    wrenchL.linear += cube_weight_force / 2
+    wrenchR.linear += cube_weight_force / 2
 
     tau_grasp = J_R.T @ wrenchR.vector - J_L.T @ wrenchL.vector
 
@@ -115,11 +115,7 @@ if __name__ == "__main__":
     import time
     from setup_meshcat import updatevisuals
     
-    robot, sim, cube = setupwithpybullet()
-
-    # Get joint info for the hand joints
-
-    print(f"Joint types: {[robot.model.joints[i] for i in [8, 14]]}")
+    robot, sim, cube, viz = setupwithpybulletandmeshcat(url="tcp://127.0.0.1:6000")
 
     from config import CUBE_PLACEMENT, CUBE_PLACEMENT_TARGET
     from inverse_geometry import computeqgrasppose
@@ -128,16 +124,18 @@ if __name__ == "__main__":
     
     q0,successinit = computeqgrasppose(robot, robot.q0, cube, CUBE_PLACEMENT, None)
     qe,successend = computeqgrasppose(robot, robot.q0, cube, CUBE_PLACEMENT_TARGET,  None)
-    #path = computepath(robotsim, cubesim, q0, qe, CUBE_PLACEMENT, CUBE_PLACEMENT_TARGET)
+    #path = computepath(robot, cube, q0, qe, CUBE_PLACEMENT, CUBE_PLACEMENT_TARGET)
     #np.savetxt('path_long.txt', path)
     path = np.loadtxt('path.txt')
+
+    displaypath(robot, cube, path, 0.01, viz)
 
     #setting initial configuration
     sim.setqsim(q0)
     sim.setTorqueControlMode()
 
     max_time = 1
-    num_of_steps = 1000
+    num_of_steps = 600
     
     trajs, time_steps = getTrajBezier(robot, cube, path, max_time, num_of_steps)
 
