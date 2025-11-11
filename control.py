@@ -56,6 +56,7 @@ def controllaw(sim, robot, trajs, tcurrent, tmax, cube, gains, dt = DT):
     # For left hand
     idx_L = robot.model.getFrameId(LEFT_HAND)
     J_L = pin.computeFrameJacobian(robot.model, robot.data, q, idx_L, pin.LOCAL_WORLD_ALIGNED)
+    f_left = np.array([0., -graspforce, f_g, 0., 0., 0.])
 
     # For right hand
     idx_R = robot.model.getFrameId(RIGHT_HAND)
