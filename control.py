@@ -13,7 +13,7 @@ from tools import getcubeplacement
 
 # Constants:
 KpHP = 18000
-KiHP = 1.0 * KpHP
+KiHP = 0. * KpHP
 KdHP = 2 * np.sqrt(KpHP)
 grasp_forceHP = 1800
 
@@ -23,10 +23,10 @@ COLLISION_THRESHOLD = 1e-3
 
 
 # Constants:
-Kp = 300
-Ki = 1.0 * Kp 
-Kd = 2.0 * np.sqrt(Kp)
-grasp_force = 300
+Kp = 1200
+Ki = 0. * Kp 
+Kd = 3.0 * np.sqrt(Kp)
+grasp_force = 0.2 * Kp
 
 gains_normal = [Kp, Ki, Kd, grasp_force]
 
@@ -112,7 +112,7 @@ def controllaw(sim, robot, trajs, tcurrent, tmax, cube, gains, dt = DT):
     # obstacleAvoidanceTau(sim, robot, trajs, tcurrent, tmax, cube, dt)
 
 
-def runControlLaw(sim, robot, cube, path, num_of_steps, max_time):
+def runControlLaw(sim, robot, cube, path, num_of_steps, max_time, gains):
     
     trajs, time_steps = getTrajBezier(robot, cube, path, max_time, num_of_steps)
 
@@ -120,7 +120,7 @@ def runControlLaw(sim, robot, cube, path, num_of_steps, max_time):
     dt = max_time/(len(time_steps))
 
     while tcurrent < max_time:
-        controllaw(sim, robot, trajs, tcurrent, max_time, cube, gains_high, dt)
+        controllaw(sim, robot, trajs, tcurrent, max_time, cube, gains, dt)
         # rununtil(controllaw, sim, robotsim, trajs, tcur, cubesim, dt)
         tcurrent += dt
         time.sleep(0.01)
@@ -165,7 +165,7 @@ def collisionDistance(robot, q):
 
 
 
-def replanner(sim, robot, cube):
+def replanner(sim, robot, cube, gains):
     q0, successinit = computeqgrasppose(robot, robot.q0, cube, CUBE_PLACEMENT, None)
     qe, successend = computeqgrasppose(robot, robot.q0, cube, CUBE_PLACEMENT_TARGET,  None)
     if successinit and successend:
@@ -176,12 +176,10 @@ def replanner(sim, robot, cube):
     max_time = 1
     num_of_steps = 1000
 
-    runControlLaw(sim, robot, cube, path, num_of_steps, max_time)
+    runControlLaw(sim, robot, cube, path, num_of_steps, max_time, gains)
     return
 
 
-
-    
 
     
 
@@ -204,7 +202,7 @@ if __name__ == "__main__":
     #np.savetxt('path_long.txt', path)
     path = np.loadtxt('path.txt')
 
-    displaypath(robot, cube, path, 0.01, viz)
+    # displaypath(robot, cube, path, 0.01, viz)
 
     #setting initial configuration
     sim.setqsim(q0)
@@ -213,9 +211,9 @@ if __name__ == "__main__":
     # COLLISION_THRESHOLD = min(collisionDistance(robot, q) for q in path)
 
     max_time = 1
-    num_of_steps = 600
+    num_of_steps = 1000
     
     int_err = np.zeros_like(path[0])
 
-    runControlLaw(sim, robot, cube, path, num_of_steps, max_time)
+    runControlLaw(sim, robot, cube, path, num_of_steps, max_time, gains_normal)
     
