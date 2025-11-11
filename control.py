@@ -31,6 +31,7 @@ def controllaw(sim, robot, trajs, tcurrent, tmax, cube, gains, dt = DT):
     pin.updateFramePlacements(robot.model, robot.data)
     pin.framesForwardKinematics(robot.model, robot.data, q)
 
+
     # Get desired q, v, a
     q_desired = trajs(tcurrent)
     v_desired = trajs.derivative(1)(tcurrent)
@@ -51,12 +52,10 @@ def controllaw(sim, robot, trajs, tcurrent, tmax, cube, gains, dt = DT):
     # Add force to figth gravity
     f_g = 0.5 * cube_mass * g * v_inertia
 
-
     # Add "grasp force" so the cube does not get dropped
     # For left hand
     idx_L = robot.model.getFrameId(LEFT_HAND)
     J_L = pin.computeFrameJacobian(robot.model, robot.data, q, idx_L, pin.LOCAL_WORLD_ALIGNED)
-    f_left = np.array([0., -graspforce, f_g, 0., 0., 0.])
 
     # For right hand
     idx_R = robot.model.getFrameId(RIGHT_HAND)
@@ -166,7 +165,7 @@ if __name__ == "__main__":
     #np.savetxt('path_long.txt', path)
     # path = np.loadtxt('path.txt')
 
-    # displaypath(robot, cube, path, 0.01, viz)
+    #displaypath(robot, cube, path, 0.001, viz)
 
     #setting initial configuration
     sim.setqsim(q0)
@@ -174,8 +173,13 @@ if __name__ == "__main__":
 
     # COLLISION_THRESHOLD = min(collisionDistance(robot, q) for q in path)
 
-    max_time = 1
+    max_time = 2
     num_of_steps = 1000
+    
+    trajs, time_steps = getTrajBezier(robot, cube, path, max_time, num_of_steps)
+
+    tcur = 0.
+    dt = max_time/(len(time_steps))
     
     int_err = np.zeros_like(path[0])
 
