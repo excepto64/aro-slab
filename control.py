@@ -102,9 +102,9 @@ def controllaw(sim, robot, trajs, tcurrent, tmax, cube, gains, dt = DT):
 
     # # Add grasp force to overall tau and step
     tau += tau_grasp 
-    if int(tcurrent*1000) % 10 == 0:
-        print(f"a[8]: {a[8]}, a[14]: {a[14]}. q[8]: {q[8]}, q[14]: {q[14]}")
-        print(f"q_err[8]: {q_err[8]}, q_err[14]: {q_err[14]}. tau[8]: {tau[8]}, tau[14]: {tau[14]}")
+    # if int(tcurrent*1000) % 10 == 0:
+    #     print(f"a[8]: {a[8]}, a[14]: {a[14]}. q[8]: {q[8]}, q[14]: {q[14]}")
+    #     print(f"q_err[8]: {q_err[8]}, q_err[14]: {q_err[14]}. tau[8]: {tau[8]}, tau[14]: {tau[14]}")
 
     sim.step(tau)
 
@@ -114,13 +114,13 @@ def controllaw(sim, robot, trajs, tcurrent, tmax, cube, gains, dt = DT):
 
 def runControlLaw(sim, robot, cube, path, num_of_steps, max_time):
     
-    trajs, time_steps = getTrajBezier(robotsim, cubesim, path, max_time, num_of_steps)
+    trajs, time_steps = getTrajBezier(robot, cube, path, max_time, num_of_steps)
 
     tcurrent = 0.
     dt = max_time/(len(time_steps))
 
     while tcurrent < max_time:
-        controllawHighPID(sim, robot, trajs, tcurrent, max_time, cube, dt)
+        controllaw(sim, robot, trajs, tcurrent, max_time, cube, gains_high, dt)
         # rununtil(controllaw, sim, robotsim, trajs, tcur, cubesim, dt)
         tcurrent += dt
         time.sleep(0.01)
@@ -141,7 +141,7 @@ def obstacleAvoidanceTau(sim, robot, trajs, tcurrent, tmax, cube, dt=DT):
         print("Avoiding Obstacle")
         print(COLLISION_THRESHOLD)
         # getCollTau(robot, q)
-        controllawHighPID(sim, robot, trajs, tcurrent, tmax, cube, dt)
+        controllaw(sim, robot, trajs, tcurrent, tmax, cube, gains_high, dt)
     else:
         return
     
@@ -166,10 +166,10 @@ def collisionDistance(robot, q):
 
 
 def replanner(sim, robot, cube):
-    q0, successinit = computeqgrasppose(robotsim, robotsim.q0, cubesim, CUBE_PLACEMENT, None)
-    qe, successend = computeqgrasppose(robotsim, robotsim.q0, cubesim, CUBE_PLACEMENT_TARGET,  None)
+    q0, successinit = computeqgrasppose(robot, robot.q0, cube, CUBE_PLACEMENT, None)
+    qe, successend = computeqgrasppose(robot, robot.q0, cube, CUBE_PLACEMENT_TARGET,  None)
     if successinit and successend:
-        path = computepath(robotsim, cubesim, q0, qe, CUBE_PLACEMENT, CUBE_PLACEMENT_TARGET)
+        path = computepath(robot, cube, q0, qe, CUBE_PLACEMENT, CUBE_PLACEMENT_TARGET)
     else:
         print("No path available")
         return
