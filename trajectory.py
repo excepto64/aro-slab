@@ -59,7 +59,7 @@ if __name__ == "__main__":
     from path import computepath, displaypath
     from bezier import Bezier
     
-    robot, cube, viz = setupwithmeshcat(url="tcp://127.0.0.1:6003")
+    robot, cube, viz = setupwithmeshcat(url="tcp://127.0.0.1:6000")
     
     q = robot.q0.copy()
     pin.framesForwardKinematics(robot.model,robot.data,q)
