@@ -114,7 +114,7 @@ def replanner(sim, robot, cube, cubepos):
     hands of the robot and there is a direct path (straight line) to the goal
     state.
     '''
-    print("Replanning for cube position\n", cubepos)
+    print("Replanning for cube position\n")
 
     q0, successinit = computeqgrasppose(robot, robot.q0, cube, cubepos, None)
     qe, successend = computeqgrasppose(robot, robot.q0, cube, CUBE_PLACEMENT_TARGET,  None)
