@@ -31,7 +31,13 @@ def computepath(robot, cube, qinit, qgoal, cubeplacementq0, cubeplacementqgoal):
     numberOfSamples4Search = 1000
     deltaq = 3
     interpolation_steps = 200
-    
+
+    # Check for a simple path 
+    path = computeSimplepath(robot, cube, qinit, qgoal, cubeplacementq0, cubeplacementqgoal, interpolation_steps)
+
+    if len(path) == interpolation_steps:
+        return path
+
     # Run RRT algorithm
     G, pathFound = RRT(robot, cube, qinit, qgoal, cubeplacementq0, cubeplacementqgoal, numberOfSamples4Search, deltaq)
     
@@ -43,6 +49,10 @@ def computepath(robot, cube, qinit, qgoal, cubeplacementq0, cubeplacementqgoal):
     else: 
         print("No path found")
         return []
+    
+def computeSimplepath(robot, cube, q0, qe, cubepos, cubeplacementqgoal, interpolation_steps = 200):
+    path, _ = interPath(robot, q0, cube, cubepos, cubeplacementqgoal, interpolation_steps)
+    return path
     
 
     
@@ -239,7 +249,7 @@ def getPathFromGraph(G, robot, cube, steps):
     shortcut_found = True
     while shortcut_found:
         config_path, cube_path, shortcut_found = shortcut(config_path, cube_path, robot, node[1], cube, steps)
-    print(f"Shortcut found with {len(config_path)} nodes. Starting interpolation...")
+    print(f"Shortcut found with {len(config_path)} nodes. \nStarting interpolation...")
 
     # Interpolate to get a smooth path.
     for i in range(len(config_path) - 1):

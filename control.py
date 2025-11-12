@@ -8,8 +8,8 @@ Created on Wed Sep  6 15:32:51 2023
 
 import numpy as np
 import pinocchio as pin
-from config import LEFT_HAND, RIGHT_HAND, LEFT_HOOK, RIGHT_HOOK, DT
-from tools import getcubeplacement
+from config import LEFT_HAND, RIGHT_HAND, DT, EPSILON
+from tools import getcubeplacement 
 
 
 # Constants:
@@ -21,11 +21,12 @@ cube_mass = 0.14
 g = 9.81
 v_inertia = 40
 
-gains_normal = [Kp, Kd, grasp_force]
-COLLISION_THRESHOLD = 1e-3
+MAX_TIME = 2
+NUM_OF_STEPS = 1000
 
-def controllaw(sim, robot, trajs, tcurrent, tmax, cube, gains, dt = DT):
-    global int_err
+GAINS = [Kp, Kd, grasp_force]
+
+def controllaw(sim, robot, trajs, tcurrent, cube, gains = GAINS, dt = DT):
     q, vq = sim.getpybulletstate()
 
     pin.updateFramePlacements(robot.model, robot.data)
@@ -69,120 +70,86 @@ def controllaw(sim, robot, trajs, tcurrent, tmax, cube, gains, dt = DT):
     tau += tau_grasp
 
     sim.step(tau)
+
+
+def runControlLaw(sim, robot, cube, path):
+    '''
+    For a path, get trajectories and runs the contorl law over these 
+    trajectories. After follwoing the path, checks if it is within EPSILON of
+    the goal state, if not, send current state to the replanner. 
+    '''
     
-    # Recursive loop to drag q back onto the path if it strays too far from 
-    # obstacleAvoidanceTau(sim, robot, trajs, tcurrent, tmax, cube, dt)
-
-
-def runControlLaw(sim, robot, cube, path, num_of_steps, max_time, gains):
-
-    print("Running Simulation: ")
-    
-    trajs, time_steps = getTrajBezier(robot, cube, path, max_time, num_of_steps)
+    trajs, time_steps = getTrajBezier(robot, cube, path, MAX_TIME, NUM_OF_STEPS)
+    print("Running Simulation... ")
 
     tcurrent = 0.
-    dt = max_time/(len(time_steps))
+    dt = MAX_TIME/(len(time_steps))
 
-    while tcurrent < max_time:
-        controllaw(sim, robot, trajs, tcurrent, max_time, cube, gains, dt)
+    while tcurrent < MAX_TIME:
+        controllaw(sim, robot, trajs, tcurrent, cube, dt=dt)
         # rununtil(controllaw, sim, robotsim, trajs, tcur, cubesim, dt)
         tcurrent += dt
         time.sleep(0.01)
     time.sleep(3)
 
-
-# Extensions:
-def obstacleAvoidanceTau(sim, robot, trajs, tcurrent, tmax, cube, dt=DT):
-
+    cubeq = getcubeplacement(cube)
+    distToGoal = np.linalg.norm(cubeq.translation - CUBE_PLACEMENT_TARGET.translation)
+    rotToGoal = np.linalg.norm(cubeq.rotation - CUBE_PLACEMENT_TARGET.rotation)
     
-    q = trajs(tcurrent)
-
-    colDist = collisionDistance(robot, q)
-
-
-
-    if colDist < COLLISION_THRESHOLD:
-        print("Avoiding Obstacle")
-        print(COLLISION_THRESHOLD)
-        # getCollTau(robot, q)
-        controllaw(sim, robot, trajs, tcurrent, tmax, cube, gains_high, dt)
+    if distToGoal + rotToGoal > EPSILON:
+        print("Not at target location")
+        replanner(sim, robot, cube, cubeq)
+        return 
     else:
-        return
-    
-
-
-def getCollTau(robot, q, trajs, tcurrent):
-
-
-    # expectedq = trajs(tcurrent)
-
-    # return pin.rnea(robot.model, robot.data, expectedq, np.zeros_like(q), np.zeros_like(q))
-    return
-
-def collisionDistance(robot, q):
-     '''Return the minimal distance between robot and environment. '''
-     pin.updateGeometryPlacements(robot.model,robot.data,robot.collision_model,robot.collision_data, q)
-     if pin.computeCollisions(robot.collision_model,robot.collision_data, False): 0
-     idx = pin.computeDistances(robot.collision_model,robot.collision_data)
-     return robot.collision_data.distanceResults[idx].min_distance
+        print("Within tolerance of Target Location\n\n")
+    return 
 
 
 
 
-def replanner(sim, robot, cube, gains):
-    q0, successinit = computeqgrasppose(robot, robot.q0, cube, CUBE_PLACEMENT, None)
+def replanner(sim, robot, cube, cubepos):
+    '''
+    Simple replanner to align cube with goal state if previous trajectory did
+    not achieve goal state. This only works if the the cube is still in the 
+    hands of the robot and there is a direct path (straight line) to the goal
+    state.
+    '''
+    print("Replanning for cube position\n", cubepos)
+
+    q0, successinit = computeqgrasppose(robot, robot.q0, cube, cubepos, None)
     qe, successend = computeqgrasppose(robot, robot.q0, cube, CUBE_PLACEMENT_TARGET,  None)
     if successinit and successend:
-        path = computepath(robot, cube, q0, qe, CUBE_PLACEMENT, CUBE_PLACEMENT_TARGET)
+        path = computeSimplepath(robot, cube, q0, qe, cubepos, CUBE_PLACEMENT_TARGET)
     else:
         print("No path available")
         return
-    max_time = 1
-    num_of_steps = 1000
-
-    runControlLaw(sim, robot, cube, path, num_of_steps, max_time, gains)
-    return
-
-
-
     
+    if len(path) != 200:
+        return
+
+    runControlLaw(sim, robot, cube, path)
+
+
 
 if __name__ == "__main__":
         
     from tools import setupwithpybullet, setupwithpybulletandmeshcat, rununtil, setupwithmeshcat
     import time
-    from setup_meshcat import updatevisuals
     
     robot, sim, cube, viz = setupwithpybulletandmeshcat(url="tcp://127.0.0.1:6000")
 
     from config import CUBE_PLACEMENT, CUBE_PLACEMENT_TARGET
     from inverse_geometry import computeqgrasppose
-    from path import computepath, displaypath
+    from path import computepath, displaypath, computeSimplepath
     from trajectory import getTrajBezier
     
     q0,successinit = computeqgrasppose(robot, robot.q0, cube, CUBE_PLACEMENT, None)
     qe,successend = computeqgrasppose(robot, robot.q0, cube, CUBE_PLACEMENT_TARGET,  None)
     path = computepath(robot, cube, q0, qe, CUBE_PLACEMENT, CUBE_PLACEMENT_TARGET)
-    #np.savetxt('path_long.txt', path)
-    # path = np.loadtxt('path.txt')
 
-    #displaypath(robot, cube, path, 0.001, viz)
-
-    #setting initial configuration
     sim.setqsim(q0)
     sim.setTorqueControlMode()
 
     # COLLISION_THRESHOLD = min(collisionDistance(robot, q) for q in path)
 
-    max_time = 2
-    num_of_steps = 1000
-    
-    trajs, time_steps = getTrajBezier(robot, cube, path, max_time, num_of_steps)
-
-    tcur = 0.
-    dt = max_time/(len(time_steps))
-    
-    int_err = np.zeros_like(path[0])
-
-    runControlLaw(sim, robot, cube, path, num_of_steps, max_time, gains_normal)
-    
+    runControlLaw(sim, robot, cube, path)

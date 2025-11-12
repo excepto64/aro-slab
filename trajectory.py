@@ -20,10 +20,6 @@ def getTrajBezier(robot, cube, path, max_time, num_of_steps):
 
     bezierPoints = getBezierPoints(path, num_of_steps)
 
-    trajs = []
-
-    # Make one single Bezier curve with multiple points in it from getShortenedPath
-    # Then iterate through time steps in the control law!!!!!
     trajs = Bezier(bezierPoints, 0, max_time)
     
     print("Got Trajectories")
