@@ -71,11 +71,12 @@ if __name__ == "__main__":
     from setup_meshcat import updatevisuals
     robot, cube, viz = setupwithmeshcat()
     
-    print(CUBE_PLACEMENT.__class__)
     q = robot.q0.copy()
+
     
     q0,successinit = computeqgrasppose(robot, q, cube, CUBE_PLACEMENT)
     updatevisuals(viz, robot, cube, q0)
+    time.sleep(3)
     
     qe,successend = computeqgrasppose(robot, q, cube, CUBE_PLACEMENT_TARGET)
-    updatevisuals(viz, robot, cube, q0)
+    updatevisuals(viz, robot, cube, qe)
